@@ -27,4 +27,4 @@ be normalised in a few different ways or returned as the log).
 
 Additionally, ``physical_dependence`` contains a couterpart to this function,
 ``mrp_b13``, which returns the MRP at a given mass vector, according to input
-physical variables, $z$, $\Omega_m$ and $\sigma_8$. 
+physical variables (redshift, matter density, rms mass variance).
