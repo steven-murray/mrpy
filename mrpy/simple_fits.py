@@ -3,13 +3,15 @@ Routines that implement simple least-squares fits directly to dn/dm without erro
 Typically used for fitting directly to theoretical functions from EPS theory.
 """
 import numpy as np
-from core import mrp,pdf_norm,A_rhoc
+from core import mrp,pdf_norm,A_rhoc, get_alpha_and_A
 from scipy.optimize import minimize
 from scipy.integrate import simps
+from special import gamma, gammainc
+from scipy.optimize import newton
 
-def get_fit_analytic(m,dndm,hs0=14.5,alpha0=-1.9,beta0=0.8,lnA0=-40,mmin=None,mmax=np.inf,
-                     Om0=0.3,rhoc=2.7755e11,sigma_rhomean=np.inf,sigma_integ=np.inf,
-                     s=1):
+#TODO: better initial guesses, better bounds, jacobians
+
+def get_fit_analytic(*args,**kwargs):
     """
     Wrapper for fit_mrp_analytic, returning the fitted parameters along with fitted curve.
 
@@ -23,21 +25,21 @@ def get_fit_analytic(m,dndm,hs0=14.5,alpha0=-1.9,beta0=0.8,lnA0=-40,mmin=None,mm
     fit : array
         Resulting fitted mass function over ``m``.
     """
-    if mmin is None:
-        mmin = np.log10(m.min())
+    res = fit_mrp_analytic(*args,**kwargs)
 
-    mask = np.logical_and(m>=10**mmin,m<=10**mmax)
+    if len(args) > 0:
+        m = args[0]
+    else:
+        m = kwargs['m']
 
-    res = fit_mrp_analytic(m,dndm,hs0,alpha0,beta0,lnA0,mmax,
-                       Om0,rhoc,sigma_rhomean,sigma_integ,s)
-
-    fit = mrp(m, res.x[0],res.x[1],res.x[2],mmin=mmin,mmax=mmax,norm=np.exp(res.x[3]))
-
+    fit = mrp(m, res[0],res[1],res[2],mmin=np.log10(m.min()),mmax=np.log10(m.max()),
+              norm=np.exp(res[3]))
     return res, fit
 
 def fit_mrp_analytic(m,dndm,hs0=14.5,alpha0=-1.9,beta0=0.8,lnA0=-40,mmax=np.inf,
                  Om0=0.3,rhoc=2.7755e11,sigma_rhomean=np.inf,sigma_integ=np.inf,
-                 s=1):
+                 s=1,bounds=True,hs_bounds=(0,16),alpha_bounds=(-2,-1.3),
+                 beta_bounds=(0.1,5.0),lnA_bounds=(-50,0)):
     """
     Basic LSQ fit for the MRP parameters, with flexible constraints.
 
@@ -86,52 +88,110 @@ def fit_mrp_analytic(m,dndm,hs0=14.5,alpha0=-1.9,beta0=0.8,lnA0=-40,mmax=np.inf,
     s : float, optional
         Mass scaling. This is used *only* for the mass-weighted integral of the
         data, which influences the constraint from ``sigma_integ``.
+
+    bounds : None or True
+        If None, don't use bounds. If true, set bounds based on bounds passed.
+
+    hs_bounds, alpha_bounds, beta_bounds, lnA_bounds : 2-tuple
+        2-tuples specifying minimum and maximum values for each bound.
     """
     # If mmax is None, set to the maximum in m
     if mmax is None:
         mmax=np.log10(m.max())
 
-    # For efficiency, take log of data and integral here.
+    # For efficiency, take log of data and do integral here.
     lndm = np.log(dndm)
     mass_weighted_integ = simps(dndm*m**s,m)
 
-    ## Define functions to calculate error on the normalisation from rhomean
-    ## or the data integral
+    # Define functions to calculate error on the normalisation from rhomean
+    # or the data integral
     def err_rhomean(x):
         return x[-1] - np.log(A_rhoc(x[0],x[1],x[2],Om0,rhoc))
+
+    def Arhomean(x):
+        return np.log(A_rhoc(x[0],x[1],x[2],Om0,rhoc))
 
     def err_integ(x):
         return x[-1] + s*x[0]*np.log(10) - np.log(mass_weighted_integ*pdf_norm(x[0],x[1]+s,x[2],
                                                            mmin=np.log10(m.min()),mmax=mmax))
 
-    ### Set up constraints if necessary.
-    cons = ()
-    if sigma_rhomean == 0 and sigma_integ==0:
-        #This may not quite work very well
-        cons = ({"type":"eq","fun":err_rhomean},
-                {"type":"eq","fun":err_integ})
-    elif sigma_rhomean == 0:
-        cons = {"type":"eq","fun":err_rhomean}
-    elif sigma_integ == 0:
-        cons = {"type":"eq","fun":err_integ}
+    def Ainteg(x):
+        return np.log(mass_weighted_integ*pdf_norm(x[0],x[1]+s,x[2],
+                      mmin=np.log10(m.min()),mmax=mmax)) - s*x[0]*np.log(10)
+
+    def A_alpha(x):
+        return get_alpha_and_A(x[0],x[1],np.log10(m.min()),mass_weighted_integ,
+                                  Om0,s=s,rhoc=rhoc)
 
     ## Define the objective function for minimization.
-    def model(p):
+    def model_4p(p):
         d = mrp(m, p[0],p[1],p[2],norm=np.exp(p[3]),mmax=mmax,log=True)
         errm = 0
         erri = 0
 
-        if sigma_rhomean !=0 and not np.isinf(sigma_rhomean):
-            errm = err_rhomean(p)**2/sigma_rhomean**2
-
-        if sigma_integ !=0 and not np.isinf(sigma_integ):
-            erri = err_integ(p)**2/sigma_integ**2
-
+        if not np.isinf(sigma_rhomean):
+            errm = err_rhomean(p)**2/(2*sigma_rhomean**2)
+        if not np.isinf(sigma_integ):
+            erri = err_integ(p)**2/(2*sigma_integ**2)
+        
         return np.sum((d-lndm)**2) + errm + erri
 
-    p0 = [hs0, alpha0, beta0,lnA0]
+    def model_3p_rhomean0(p):
+        A = np.exp(Arhomean(p))
+        d = mrp(m, p[0],p[1],p[2],norm=A,mmax=mmax,log=True)
 
+        erri = 0
+        if not np.isinf(sigma_integ):
+            erri = err_integ(p)**2/(2*sigma_integ**2)
+
+        return np.sum((d-lndm)**2) + erri
+
+    def model_3p_integ0(p):
+        A = np.exp(Ainteg(p))
+        d = mrp(m, p[0],p[1],p[2],norm=A,mmax=mmax,log=True)
+
+        erri = 0
+        if not np.isinf(sigma_integ):
+            erri = err_rhomean(p)**2/(2*sigma_rhomean**2)
+
+        return np.sum((d-lndm)**2) + erri
+
+    def model_2p(p):
+        A,alpha = A_alpha(p)
+        d = mrp(m, p[0],alpha,p[1],norm=A,mmax=mmax,log=True)
+        return np.sum((d-lndm)**2)
+
+    if sigma_integ==0 and sigma_rhomean==0:
+        p0 = [hs0,beta0]
+        if bounds:
+            bounds = [hs_bounds,beta_bounds]
+        model = model_2p
+        res = minimize(model, p0, bounds=bounds)
+        A,alpha = A_alpha(res.x)
+        out = [res.x[0],alpha,res.x[1],np.log(A)]
+
+    elif sigma_integ==0:
+        p0 = [hs0, alpha0, beta0]
+        if bounds: bounds = [hs_bounds,alpha_bounds,beta_bounds]
+        model = model_3p_integ0
+        res = minimize(model, p0, bounds=bounds)
+        out = np.concatenate((res.x,[Ainteg(res.x)]))
+
+    elif sigma_rhomean==0:
+        p0 = [hs0, alpha0, beta0]
+        if bounds: bounds = [hs_bounds,alpha_bounds,beta_bounds]
+        model = model_3p_rhomean0
+        res = minimize(model, p0, bounds=bounds)
+        out = np.concatenate((res.x ,[Arhomean(res.x)]))
+
+    else:
+        print "doing the right thing"
+        p0 = [hs0, alpha0, beta0,lnA0]
+        if bounds: bounds = [hs_bounds,alpha_bounds,beta_bounds,lnA_bounds]
+        print "bounds: ", bounds
+        model = model_4p
+        res = minimize(model, p0, bounds=bounds)
+        out = res.x
     # There's a bit of hackery here, with the bounds. This should be fixed.
     # Also, we could provide the jacobian for faster fits.
-    return  minimize(model, p0, method="SLSQP",constraints=cons,bounds=[(hs0-4,hs0+4),(max(-1.99,alpha0-0.3),alpha0+0.3),
-                                                                        (beta0-0.5,beta0+0.5),(lnA0-20,lnA0+20)])
+    return out
