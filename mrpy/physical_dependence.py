@@ -5,41 +5,41 @@ parameters, defined with respect to Behroozi+13.
 import numpy as np
 from core import mrp, pdf_norm
 
-def Hs_b13(z=0,Om0=0.315,sig8=0.829,mu=12.216,sd=1.6413,a=1.6955,b=5.4038,
-           c=0.88450,d=5.7651):
+def logHs_b13(z=0,Om0=0.315,sig8=0.829,mu=12.214,sd=1.6385,a=0.058562,b=1.4394,
+              c=0.39111,d=0.11159,e=0.056010,f=0.42444,g=0.90369,h=0.0029417):
     """
     Return log of scale mass, Hs, as a function of physical parameters
     """
-    return  mu+ sd*(Om0 + a*sig8 + b*c**z - d)
+    return   mu + sd*(a + b*sig8 + c*Om0 + d*sig8*z + e*z**2 + f*sig8*Om0*z - g*z - h*z**3)
 
 
-def alpha_b13(z=0,Om0=0.315,sig8=0.829,mu=-1.9100,sd=0.026819,a=3.0460,b=0.17600,
-              c=1.8861,d=1.5235):
+def alpha_b13(z=0,Om0=0.315,sig8=0.829,mu=-1.9097,sd=0.026906,a=2.6172,b=2.06023,
+              c=1.4791,d=2.2142,e=0.53400,f=2.70981,g=0.19690):
     """
     Return power-law index, alpha, as a function of physical parameters.
     """
-    return mu + sd*(a*Om0 + sig8**2 + b*Om0*z**(-c*z) - d*np.log(1.0 + z))
+    return mu + sd*(a*Om0 + b*sig8 + c*d**Om0*e**z - f - g*z)
 
-def beta_b13(z=0,Om0=0.315,sig8=0.829,mu=0.50056,sd=0.12893,a=6.2701,b=2.0153,
-             c=0.53101,d=1.8976,e=0.56778):
+def beta_b13(z=0,Om0=0.315,sig8=0.829,mu=0.49961,sd=0.12913,a=7.5217,b=0.18866,
+             c=0.36891,d=0.071716,e=0.0029092,f=3.4453,g=0.71052):
     """
     Return cut-off parameter, beta, as a function of physical parameters.
     """
-    return mu + sd*(a*sig8*Om0 + b*c**z - d - e*Om0*z)
+    return mu + sd*(a*sig8*Om0 - b - c*z - d*e**z - f*Om0*z*g**z)
 
-def logA_b13(z=0,Om0=0.315,sig8=0.829,mu=3.9293,sd=4.6086,a=1.0587,b=0.0029051,
-             c=0.25536,d=1.3090,e=0.049780,f=0.32113,g=0.42027):
+def logA_b13(z=0,Om0=0.315,sig8=0.829,mu=-33.268,sd=7.3593,a=0.0029187,b=0.15541,
+             c=1.4657,d=0.055025,e=0.24068,f=0.33620):
     """
     Return the natural log of the normalisation, A, in units of the pdf normalisation,
     as a function of physical parameters.
     """
-    return mu + sd*(a*z + b*z**3 - c - d*sig8 - e*z**2 - f*sig8*z - g*Om0*z)
+    return mu + sd*(z + a*z**3 - b - c*sig8 - d*z**2 - e*sig8*z - f*Om0*z)
 
 def mrp_params_b13(z=0,Om0=0.315,sig8=0.829,Hs_kw={},alpha_kw={},beta_kw={},logA_kw={}):
     """
     Return all 4 MRP parameters as a function of physical parameters.
     """
-    return Hs_b13(z,Om0,sig8,**Hs_kw), alpha_b13(z,Om0,sig8,**alpha_kw), \
+    return logHs_b13(z,Om0,sig8,**Hs_kw), alpha_b13(z,Om0,sig8,**alpha_kw), \
            beta_b13(z,Om0,sig8,**beta_kw), logA_b13(z,Om0,sig8,**logA_kw)
 
 def mrp_b13(m,z=0,Om0=0.315,sig8=0.829,Hs_kw={},alpha_kw={},beta_kw={},logA_kw={},
@@ -53,8 +53,6 @@ def mrp_b13(m,z=0,Om0=0.315,sig8=0.829,Hs_kw={},alpha_kw={},beta_kw={},logA_kw={
     hs, alpha,beta,logA = mrp_params_b13(z,Om0,sig8,beta_kw,alpha_kw,Hs_kw,logA_kw)
 
     if norm is None:
-        if mmin is None:
-            mmin = np.log10(m.min())
-        norm = np.exp(logA) * pdf_norm(hs,alpha,beta,mmin,mmax)
+        norm = np.exp(logA)
 
     return mrp(m,hs,alpha,beta,mmin,mmax,norm,log,**Arhoc_kw)
