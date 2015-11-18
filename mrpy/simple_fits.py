@@ -11,7 +11,7 @@ from scipy.optimize import newton
 
 #TODO: better initial guesses, better bounds, jacobians
 
-def get_fit_analytic(*args,**kwargs):
+def get_fit_curve(*args,**kwargs):
     """
     Wrapper for fit_mrp_analytic, returning the fitted parameters along with fitted curve.
 
@@ -25,7 +25,7 @@ def get_fit_analytic(*args,**kwargs):
     fit : array
         Resulting fitted mass function over ``m``.
     """
-    res = fit_mrp_analytic(*args,**kwargs)
+    res = fit_curve(*args,**kwargs)
 
     if len(args) > 0:
         m = args[0]
@@ -36,7 +36,7 @@ def get_fit_analytic(*args,**kwargs):
               norm=np.exp(res[3]))
     return res, fit
 
-def fit_mrp_analytic(m,dndm,hs0=14.5,alpha0=-1.9,beta0=0.8,lnA0=-40,mmax=np.inf,
+def fit_curve(m,dndm,hs0=14.5,alpha0=-1.9,beta0=0.8,lnA0=-40,mmax=np.inf,
                  Om0=0.3,rhoc=2.7755e11,sigma_rhomean=np.inf,sigma_integ=np.inf,
                  s=1,bounds=True,hs_bounds=(0,16),alpha_bounds=(-2,-1.3),
                  beta_bounds=(0.1,5.0),lnA_bounds=(-50,0),jac=True,**minimize_kw):
