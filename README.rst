@@ -89,3 +89,4 @@ Upcoming features include:
 * Implementation of a fast, analytic, ideal likelihood based on fitting to samples
 of halos drawn from a pure MRP distribution.
 * A useful re-parameterisation of the MRP
+* Online docs
