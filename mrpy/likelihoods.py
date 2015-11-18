@@ -632,15 +632,24 @@ class MRP_Curve_Likelihood(MRP_PO_Likelihood):
     A subclass of MRP_PO_Likelihood which implements Jacobians/Hessians for
     binned data (o theoretical curves).
     """
-    def __init__(self,lnA,data,sig_rhomean=np.inf,sig_integ=np.inf,sig_data=1,Om0=0.3,
-                 rhoc=2.7755e11,**kwargs):
+    def __init__(self,lnA,dndm=None,sig_rhomean=np.inf,sig_integ=np.inf,sig_data=1,Om0=0.3,
+                 rhoc=2.7755e11,mw_data=None,mw_integ=None,**kwargs):
         super(MRP_Curve_Likelihood,self).__init__(**kwargs)
         self.sig_rhomean=sig_rhomean
         self.sig_integ = sig_integ
-        self.data = data
+
+        if dndm is None and mw_data is None:
+            raise ValueError("At least one of dndm or mw_data must be specified")
+
+        if mw_data is not None:
+            self.mw_data = mw_data
+        else:
+            self.mw_data = dndm * self.m**self.scale
+
         self.Om0=Om0
         self.rhoc = rhoc
         self.sig_data=sig_data
+        self._mw_integ = mw_integ
 
         # Now correctly set alpha and A if necessary
         if sig_integ==0 and sig_rhomean==0:
@@ -650,7 +659,7 @@ class MRP_Curve_Likelihood(MRP_PO_Likelihood):
             self._alpha_s = self.alpha + self.scale
 
         elif sig_integ==0:
-            self.lnA = np.log(self.mw_integ*self._q_) - self.scale*self.logHs*np.log(10)
+            self.lnA = np.log(self.mw_integ/self._q_) - self.scale*self.logHs*np.log(10)
 
         elif sig_rhomean==0:
             self.lnA = np.log(core.A_rhoc(self.logHs,self.alpha,self.beta,Om0,rhoc))
@@ -665,7 +674,10 @@ class MRP_Curve_Likelihood(MRP_PO_Likelihood):
 
     @cached
     def mw_integ(self):
-        return simps(self.data*self.m**self.scale,self.m)
+        if self._mw_integ is not None:
+            return self._mw_integ
+        else:
+            return simps(self.mw_data,self.m)
 
     #===========================================================================
     # Basic likelihood
@@ -675,7 +687,7 @@ class MRP_Curve_Likelihood(MRP_PO_Likelihood):
         """
         Distance between log theory and log data
         """
-        return self.lnA + self._lng - np.log(self.data)
+        return self.lnA + self._lng + self.scale*self.logHs*ln10 - np.log(self.mw_data)
 
     @cached
     def delta_integ(self):
@@ -700,7 +712,7 @@ class MRP_Curve_Likelihood(MRP_PO_Likelihood):
                 errm = self.delta_rhomean**2/(2*self.sig_rhomean**2)
             if self.sig_integ!=0 and not np.isinf(self.sig_integ):
                 erri = self.delta_integ**2/(2*self.sig_integ**2)
-        return -(base+errm+erri)
+        return -(base+errm/len(self.m)+erri/len(self.m))
 
     #===========================================================================
     # Simple lnk(theta) derivatives
@@ -717,27 +729,133 @@ class MRP_Curve_Likelihood(MRP_PO_Likelihood):
     def _lnk_b(self):
         return -self._lnk_a * self._zk
 
+    @cached
+    def _lnk_h_h(self):
+        return 0
+
+    @cached
+    def _lnk_h_a(self):
+        return 0
+
+    @cached
+    def _lnk_h_b(self):
+        return 0
+
+    @cached
+    def _lnk_a_a(self):
+        return polygamma(1,self._zk)/self.beta**2
+
+    @cached
+    def _lnk_a_b(self):
+        return -(self._lnk_a_a *self._zk + self._lnk_a/self.beta)
+
+    @cached
+    def _lnk_b_b(self):
+        return self._lnk_a_a * self._zk**2 + 2*self._zk * self._lnk_a/self.beta
+
     #===========================================================================
     # Jacobian etc.
     #===========================================================================
     @cached
+    def _Delta_jac(self):
+        return np.array([self._lng_h + self.scale*ln10,self._lng_a,self._lng_b,np.ones_like(self.m)])
+
+    @cached
+    def _delta_integ_jac(self):
+        return np.array([self._lnq_h+self.scale*ln10,self._lnq_a,self._lnq_b,1])
+
+    @cached
+    def _delta_rhomean_jac(self):
+        return np.array([self._lnk_h,self._lnk_a,self._lnk_b,1])
+
+    @cached
     def jacobian(self):
-        base = self.Delta * np.array([self._lng_h,self._lng_a,self._lng_b,np.ones_like(self.m)])/self.sig_data**2
+        base = self.Delta * self._Delta_jac/self.sig_data**2
+
         errm = np.zeros(4)
         erri = np.zeros(4)
         if self.sig_integ !=0 and not np.isinf(self.sig_integ):
-            erri = self.delta_integ*np.array([self._lnq_h+self.scale*ln10,self._lnq_a,self._lnq_b,1])/self.sig_integ**2
+            erri = self.delta_integ*self._delta_integ_jac/self.sig_integ**2
         if self.sig_rhomean != 0 and not np.isinf(self.sig_rhomean):
-            errm = self.delta_rhomean*np.array([self._lnk_h,self._lnk_a,self._lnk_b,1])/self.sig_rhomean**2
+            errm = self.delta_rhomean*self._delta_rhomean_jac/self.sig_rhomean**2
 
         if self.sig_rhomean==0 and self.sig_integ==0:
-            raise NotImplementedError()
-            # return -np.sum(base,axis=1)[[0,2]]
+            raise NotImplementedError("will have to be numerical eventually...")
         elif self.sig_rhomean==0:
-            raise NotImplementedError()
-            # return -np.sum(base[:-1].T + erri[:-1],axis=0)
+            standard = -np.sum(base[:-1].T,axis=0) - erri[:-1]
+            return standard + self._delta_rhomean_jac[:-1] * (np.sum(self.Delta/self.sig_data**2) + np.sum(self.delta_integ/self.sig_integ**2))
         elif self.sig_integ==0:
-            raise NotImplementedError()
-            # return -np.sum(base[:-1].T + errm[:-1],axis=0)
+            standard = -np.sum(base[:-1].T,axis=0) - errm[:-1]
+            return standard + self._delta_integ_jac[:-1] * (np.sum(self.Delta/self.sig_data**2) + np.sum(self.delta_rhomean/self.sig_rhomean**2))
         else:
-            return -np.sum(base.T + erri + errm,axis=0)
+            return -(np.sum(base.T,axis=0) + erri + errm)
+
+    @cached
+    def _lng_xy(self):
+        return np.array([[getattr(self,"_lng_%s_%s"%(x if i<j else y,x if i>j else y)) for i,x in enumerate("hab") ] for j,y in enumerate("hab")])
+        #return np.vstack((np.array([[getattr(self,"_lng_%s_%s"%(x if i<j else y,x if i>j else y)) for i,x in enumerate("hab") ] +inside for j,y in enumerate("hab")]),z))
+
+    @cached
+    def _lngx_lngy(self):
+        return np.array([[getattr(self,"_lng_%s"%x) * getattr(self,"_lng_%s"%y)   for x in "hab"] for y in "hab"])
+
+
+    @cached
+    def _lnq_xy(self):
+        return np.array([[getattr(self,"_q_%s_%s"%(x if i<j else y,x if i>j else y)) for i,x in enumerate("hab") ] for j,y in enumerate("hab")]) - self._lnqx_lnqy
+        #return np.vstack((np.array([[getattr(self,"_lng_%s_%s"%(x if i<j else y,x if i>j else y)) for i,x in enumerate("hab") ] +inside for j,y in enumerate("hab")]),z))
+
+    @cached
+    def _lnqx_lnqy(self):
+        return np.array([[getattr(self,"_lnq_%s"%x) * getattr(self,"_lnq_%s"%y)   for x in "hab"] for y in "hab"])
+
+    @cached
+    def _lnk_xy(self):
+        return np.array([[getattr(self,"_lnk_%s_%s"%(x if i<j else y,x if i>j else y)) for i,x in enumerate("hab") ] for j,y in enumerate("hab")])
+        #return np.vstack((np.array([[getattr(self,"_lng_%s_%s"%(x if i<j else y,x if i>j else y)) for i,x in enumerate("hab") ] +inside for j,y in enumerate("hab")]),z))
+
+    @cached
+    def _lnkx_lnky(self):
+        return np.array([[getattr(self,"_lnk_%s"%x) * getattr(self,"_lnk_%s"%y)   for x in "hab"] for y in "hab"])
+
+    @cached
+    def _lnkx_lngy(self):
+        return np.array([[getattr(self,"_lnk_%s"%x) * getattr(self,"_lng_%s"%y)   for x in "hab"] for y in "hab"])
+
+    @cached
+    def _lnqx_lngy(self):
+        return np.array([[getattr(self,"_lnq_%s"%x) * getattr(self,"_lng_%s"%y)   for x in "hab"] for y in "hab"])
+
+    @cached
+    def hessian(self):
+        data_term = np.ones((4,4))
+        data_term[:-1,:-1] = np.sum((self.Delta * self._lng_xy + self._lngx_lngy)/self.sig_data**2,axis=-1)
+        data_term[:,-1] = np.sum( self._Delta_jac/self.sig_data**2,axis=-1)
+        data_term[-1,:] = np.sum(self._Delta_jac/self.sig_data**2,axis=-1)
+
+        errm = np.zeros((4,4))
+        erri = np.zeros((4,4))
+        if self.sig_integ !=0 and not np.isinf(self.sig_integ):
+            erri[:-1,:-1] = (self.delta_integ * self._lnq_xy + self._lnqx_lnqy)/self.sig_integ**2
+            erri[:,-1] = self._delta_integ_jac/self.sig_integ**2
+            erri[-1,:] = self._delta_integ_jac/self.sig_integ**2
+
+        if self.sig_rhomean != 0 and not np.isinf(self.sig_rhomean):
+            errm[:-1,:-1] = self.delta_rhomean* self._lnk_xy + self._lnkx_lnky
+            errm[:,-1] = self._delta_rhomean_jac/self.sig_rhomean**2
+            errm[-1,:] = self._delta_rhomean_jac/self.sig_rhomean**2
+
+        if self.sig_rhomean==0 and self.sig_integ==0:
+            raise NotImplementedError("will have to be numerical eventually...")
+        elif self.sig_rhomean==0:
+            standard = data_term + erri
+            second = -self._lnk_xy*(np.sum(self.Delta/self.sig_data**2) + self.delta_integ/self.sig_integ**2)
+            third = -(np.sum(self._lnkx_lngy/self.sig_data**2,axis=-1) + self._lnkx_lnky/self.sig_integ**2)
+            return standard[:-1,:-1]+second+third
+        elif self.sig_integ==0:
+            standard = data_term + errm
+            second = -self._lnq_xy*(np.sum(self.Delta/self.sig_data**2) + self.delta_rhomean/self.sig_rhomean**2)
+            third = -(np.sum(self._lnqx_lngy/self.sig_data**2,axis=-1) + self._lnqx_lnqy/self.sig_rhomean**2)
+            return standard[:-1,:-1]+second+third
+        else:
+            return -(data_term + errm + erri)
