@@ -94,7 +94,6 @@ Upcoming features include:
 * Ability to use MCMC methods to fit to samples of halos
 * STAN modules for MCMC fits to halo samples with arbitrary mass uncertainty
 * Methods for defining Stellar-mass Halo-Mass relations
-* Implementation of a fast, analytic, ideal likelihood based on fitting to samples
-of halos drawn from a pure MRP distribution.
+* Implementation of a fast, analytic, ideal likelihood based on fitting to samples of halos drawn from a pure MRP distribution.
 * A useful re-parameterisation of the MRP
 * Online docs
