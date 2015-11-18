@@ -6,6 +6,7 @@ script: nosetests
 install:
 - sudo apt-get install python-numpy python-scipy
 - pip install mpmath
+- pip install cached_property
 deploy:
   user: stevenjeanette
   on:
@@ -16,7 +17,7 @@ deploy:
 virtualenv:
   system_site_packages: true
 language: python
-before_install:
-- sudo apt-get install gfortran
+# before_install:
+# - sudo apt-get install gfortran
 python:
 - "2.7"
