@@ -3,6 +3,13 @@ mrpy
 
 A Python package for calculations with the MRP parameterisation of the Halo Mass Function.
 
+.. image:: https://travis-ci.org/steven-murray/mrpy.png?branch=master
+		:target: https://travis-ci.org/steven-murray/mrpy
+.. image:: https://pypip.in/d/mrpy/badge.png
+        :target: https://pypi.python.org/pypi/mrpy/
+.. image:: https://pypip.in/v/mrpy/badge.png
+        :target: https://pypi.python.org/pypi/mrpy/
+
 Installation
 ------------
 Required packages are numpy, scipy and mpmath (for incomplete gamma functions).
