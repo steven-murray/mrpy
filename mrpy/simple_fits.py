@@ -39,7 +39,7 @@ def get_fit_analytic(*args,**kwargs):
 def fit_mrp_analytic(m,dndm,hs0=14.5,alpha0=-1.9,beta0=0.8,lnA0=-40,mmax=np.inf,
                  Om0=0.3,rhoc=2.7755e11,sigma_rhomean=np.inf,sigma_integ=np.inf,
                  s=1,bounds=True,hs_bounds=(0,16),alpha_bounds=(-2,-1.3),
-                 beta_bounds=(0.1,5.0),lnA_bounds=(-50,0)):
+                 beta_bounds=(0.1,5.0),lnA_bounds=(-50,0),jac=True,**minimize_kw):
     """
     Basic LSQ fit for the MRP parameters, with flexible constraints.
 
@@ -94,6 +94,12 @@ def fit_mrp_analytic(m,dndm,hs0=14.5,alpha0=-1.9,beta0=0.8,lnA0=-40,mmax=np.inf,
 
     hs_bounds, alpha_bounds, beta_bounds, lnA_bounds : 2-tuple
         2-tuples specifying minimum and maximum values for each bound.
+
+    jac : bool, optional
+        Whether to use analytic jacobian (usually a good idea)
+
+    minimize_kw : dict
+        Any other parameters to :func:`scipy.minimize`.
     """
     # If mmax is None, set to the maximum in m
     if mmax is None:
@@ -101,97 +107,64 @@ def fit_mrp_analytic(m,dndm,hs0=14.5,alpha0=-1.9,beta0=0.8,lnA0=-40,mmax=np.inf,
 
     # For efficiency, take log of data and do integral here.
     lndm = np.log(dndm)
-    mass_weighted_integ = simps(dndm*m**s,m)
-
-    # Define functions to calculate error on the normalisation from rhomean
-    # or the data integral
-    def err_rhomean(x):
-        return x[-1] - np.log(A_rhoc(x[0],x[1],x[2],Om0,rhoc))
-
-    def Arhomean(x):
-        return np.log(A_rhoc(x[0],x[1],x[2],Om0,rhoc))
-
-    def err_integ(x):
-        return x[-1] + s*x[0]*np.log(10) - np.log(mass_weighted_integ*pdf_norm(x[0],x[1]+s,x[2],
-                                                           mmin=np.log10(m.min()),mmax=mmax))
-
-    def Ainteg(x):
-        return np.log(mass_weighted_integ*pdf_norm(x[0],x[1]+s,x[2],
-                      mmin=np.log10(m.min()),mmax=mmax)) - s*x[0]*np.log(10)
-
-    def A_alpha(x):
-        return get_alpha_and_A(x[0],x[1],np.log10(m.min()),mass_weighted_integ,
-                                  Om0,s=s,rhoc=rhoc)
+    mw_data = dndm*m**s
+    mass_weighted_integ = simps(mw_data,m)
 
     ## Define the objective function for minimization.
-    def model_4p(p):
-        d = mrp(m, p[0],p[1],p[2],norm=np.exp(p[3]),mmax=mmax,log=True)
-        errm = 0
-        erri = 0
+    def model(p):
+        if len(p) == 4:
+            hs,alpha,beta,lnA = p
+        elif len(p)==3:
+            lnA = 0
+            hs,alpha,beta = p
+        else:
+            lnA = 0
+            alpha = 0
+            hs,beta = p
 
-        if not np.isinf(sigma_rhomean):
-            errm = err_rhomean(p)**2/(2*sigma_rhomean**2)
-        if not np.isinf(sigma_integ):
-            erri = err_integ(p)**2/(2*sigma_integ**2)
-        
-        return np.sum((d-lndm)**2) + errm + erri
+        _curve = MRP_Curve_Likelihood(logm=log10(m),logHs=hs,alpha=alpha,beta=beta,lnA=lnA,
+                                      sig_rhomean=sigma_rhomean,sig_integ=sigma_integ,scale=s,mw_data=mw_data,
+                                      mw_integ = mass_weighted_integ)
+        if jac:
+            return -_curve.lnL,-_curve.jacobian
+        else:
+            return -_curve.lnL
 
-    def model_3p_rhomean0(p):
-        A = np.exp(Arhomean(p))
-        d = mrp(m, p[0],p[1],p[2],norm=A,mmax=mmax,log=True)
 
-        erri = 0
-        if not np.isinf(sigma_integ):
-            erri = err_integ(p)**2/(2*sigma_integ**2)
-
-        return np.sum((d-lndm)**2) + erri
-
-    def model_3p_integ0(p):
-        A = np.exp(Ainteg(p))
-        d = mrp(m, p[0],p[1],p[2],norm=A,mmax=mmax,log=True)
-
-        erri = 0
-        if not np.isinf(sigma_integ):
-            erri = err_rhomean(p)**2/(2*sigma_rhomean**2)
-
-        return np.sum((d-lndm)**2) + erri
-
-    def model_2p(p):
-        A,alpha = A_alpha(p)
-        d = mrp(m, p[0],alpha,p[1],norm=A,mmax=mmax,log=True)
-        return np.sum((d-lndm)**2)
 
     if sigma_integ==0 and sigma_rhomean==0:
         p0 = [hs0,beta0]
         if bounds:
             bounds = [hs_bounds,beta_bounds]
-        model = model_2p
-        res = minimize(model, p0, bounds=bounds)
-        A,alpha = A_alpha(res.x)
-        out = [res.x[0],alpha,res.x[1],np.log(A)]
+        res = minimize(model, p0, bounds=bounds,jac=jac,**minimize_kw)
+        _c = MRP_Curve_Likelihood(logm=log10(m),logHs=res.x[0],alpha=res.x[1],beta=res.x[2],lnA=0,
+                                      sig_rhomean=sigma_rhomean,sig_integ=sigma_integ,scale=s,mw_data=mw_data,
+                                      mw_integ = mass_weighted_integ)
+        lnA = _c.lnA
+        alpha = _c.alpha
+
+        out = [res.x[0],alpha,res.x[1],lnA]
 
     elif sigma_integ==0:
         p0 = [hs0, alpha0, beta0]
         if bounds: bounds = [hs_bounds,alpha_bounds,beta_bounds]
-        model = model_3p_integ0
-        res = minimize(model, p0, bounds=bounds)
-        out = np.concatenate((res.x,[Ainteg(res.x)]))
+        res = minimize(model, p0, bounds=bounds,jac=jac,**minimize_kw)
+        out = np.concatenate((res.x,[MRP_Curve_Likelihood(logm=log10(m),logHs=res.x[0],alpha=res.x[1],beta=res.x[2],lnA=0,
+                                      sig_rhomean=sigma_rhomean,sig_integ=sigma_integ,scale=s,mw_data=mw_data,
+                                      mw_integ = mass_weighted_integ).lnA]))
 
     elif sigma_rhomean==0:
         p0 = [hs0, alpha0, beta0]
         if bounds: bounds = [hs_bounds,alpha_bounds,beta_bounds]
-        model = model_3p_rhomean0
-        res = minimize(model, p0, bounds=bounds)
-        out = np.concatenate((res.x ,[Arhomean(res.x)]))
+        res = minimize(model, p0, bounds=bounds,jac=jac,**minimize_kw)
+        out = np.concatenate((res.x ,[MRP_Curve_Likelihood(logm=log10(m),logHs=res.x[0],alpha=res.x[1],beta=res.x[2],lnA=0,
+                                      sig_rhomean=sigma_rhomean,sig_integ=sigma_integ,scale=s,mw_data=mw_data,
+                                      mw_integ = mass_weighted_integ).lnA]))
 
     else:
-        print "doing the right thing"
         p0 = [hs0, alpha0, beta0,lnA0]
         if bounds: bounds = [hs_bounds,alpha_bounds,beta_bounds,lnA_bounds]
-        print "bounds: ", bounds
-        model = model_4p
-        res = minimize(model, p0, bounds=bounds)
+        res = minimize(model, p0, bounds=bounds,jac=jac,**minimize_kw)
         out = res.x
-    # There's a bit of hackery here, with the bounds. This should be fixed.
-    # Also, we could provide the jacobian for faster fits.
+
     return out
