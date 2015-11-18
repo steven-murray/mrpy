@@ -88,6 +88,7 @@ called as::
 Coming Soon
 -----------
 Upcoming features include:
+
 * Proper calculation of Hessians when fitting MRP to curves
 * Ability to fit robustly to samples of halos using downhill gradient methods.
 * Ability to use MCMC methods to fit to samples of halos
