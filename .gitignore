@@ -2,3 +2,4 @@ build
 dist
 mrpy.egg-info
 .idea/*
+*.pyc
