@@ -1,6 +1,7 @@
 """
 Functions to do various things with the MRP, like generate a sample of masses.
 """
+import numpy as np
 import core
 from scipy.interpolate import InterpolatedUnivariateSpline as spline
 
