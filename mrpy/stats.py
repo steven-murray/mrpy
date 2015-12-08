@@ -8,6 +8,7 @@ The distribution functions implemented here are described in detail in Murray, R
 import numpy as np
 from special import gammainc
 from scipy.interpolate import InterpolatedUnivariateSpline as spline
+from scipy.misc import comb
 
 ln10 = np.log(10)
 
@@ -380,8 +381,171 @@ class TGGD(object):
 
     @property
     def mean(self):
-        return self.scale * (gammainc((self.a+2)/self.b,(self.xmin/self.scale)**self.b)/
-                             gammainc((self.a+1)/self.b,(self.xmin/self.scale)**self.b))
+        """
+        The mean of the distribution.
+
+        Examples
+        --------
+        >>> from mrpy.stats import TGGD
+        >>> t = TGGD()
+        >>> r = t.rvs(1e6)
+        >>> np.isclose(np.mean(r)/t.mean,1,rtol=1e-2) #should be close to 1
+        True
+        """
+        return self.raw_moments(1)
+
+    def raw_moments(self,n):
+        """
+        Calculate the nth raw moment, E[X^n].
+
+        Parameters
+        ----------
+        n : array_like
+            The order(s) of the moment desired.
+
+        Returns
+        -------
+        mu_n : array_like
+            The raw moment(s) corresponding to the order(s) `n`.
+
+        Notes
+        -----
+        The 1st raw moment is equivalent to the mean.
+
+        Examples
+        --------
+        >>> from mrpy.stats import TGGD
+        >>> t = TGGD()
+        >>> mean = t.raw_moments(1)
+        >>> ten_moments = t.raw_moments(np.arange(10)) #doctest: +SKIP
+        """
+        zn = (self.a + 1 + n)/self.b
+        z0 = (self.a + 1)/self.b
+        x = (self.xmin/self.scale)**self.b
+        return self.scale**n * gammainc(zn,x)/gammainc(z0,x)
+
+    def central_moments(self,n):
+        """
+        Calculate the nth central moment, E[(X-mu)^n].
+
+        Parameters
+        ----------
+        n : integer
+            The order of the moment desired.
+
+        Returns
+        -------
+        mu_n : float
+            The nth central moment.
+
+        Notes
+        -----
+        The 2nd central moment is equivalent to the variance.
+
+        Examples
+        --------
+        >>> from mrpy.stats import TGGD
+        >>> t = TGGD()
+        >>> variance = t.central_moments(2)
+        >>> tenth_moment = t.raw_moments(10)
+        >>> tenth_moment
+        4.20329613113987e+144
+        """
+        k = np.arange(n+1)
+        sign  = (-1)**(n-k)
+
+        zk = (self.a + 1 + k)/self.b
+        z0 = (self.a + 1)/self.b
+        z1 = (self.a + 2)/self.b
+
+        x = (self.xmin/self.scale)**self.b
+
+        coeffs = comb(n,k)
+
+        return self.scale**n * np.sum(coeffs * gammainc(z1,x)**(n - k) *
+                                      gammainc(zk,x)*sign/gammainc(z0,x)**(n-k+1))
+
+    @property
+    def variance(self):
+        """
+        The variance of the distribution.
+
+        Examples
+        --------
+        >>> from mrpy.stats import TGGD
+        >>> t = TGGD()
+        >>> r = t.rvs(1e6)
+        >>> np.isclose(np.var(r)/t.variance,1,rtol=1e-1) # should be close to 1
+        True
+        """
+        return self.central_moments(2)
+
+    def normalised_central_moments(self,n):
+        """
+        Calculate the nth standardized central moment, E[(X-mu)^n]/sigma^n.
+
+        Parameters
+        ----------
+        n : integer
+            The order of the moment desired.
+
+        Returns
+        -------
+        mu_n : float
+            The nth standardized central moment.
+
+        Notes
+        -----
+        The 3rd standardized central moment is equivalent to the skewness.
+        """
+        return self.central_moments(n)/self.variance**(n/2.0)
+
+    @property
+    def skewness(self):
+        """
+        The 3rd-order moment of the distribution.
+
+        Examples
+        --------
+        >>> from mrpy.stats import TGGD
+        >>> from scipy.stats import skew
+        >>> t = TGGD()
+        >>> r = t.rvs(1e6)
+        >>> np.isclose(skew(r)/t.skewness,1,rtol=1e-1) #should be close to 1
+        True
+        """
+        return self.normalised_central_moments(3)
+
+    @property
+    def kurtosis(self):
+        """
+        The 4th-order moment of the distribution
+
+        Examples
+        --------
+        >>> from mrpy.stats import TGGD
+        >>> from scipy.stats import kurtosis
+        >>> t = TGGD()
+        >>> r = t.rvs(1e6)
+        >>> np.isclose(kurtosis(r)/t.kurtosis,1,rtol=1e-1) #should be close to 1
+        True
+        """
+        return self.normalised_central_moments(4)-3.0
+
+    @property
+    def hyperskewness(self):
+        """
+        The 5th-order moment of the distribution
+        """
+        return self.normalised_central_moments(5)
+
+    @property
+    def hyperflatness(self):
+        """
+        The 6th order moment of the distribution
+        """
+        return self.normalised_central_moments(6)
+
 
 class TGGDlog(object):
     def __init__(self, scale=14.0, a=-1.0, b=1.0, xmin=10.0):
