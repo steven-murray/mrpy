@@ -21,25 +21,13 @@ before_install:
   # Useful for debugging any issues with conda
   - conda info -a
 
-script:
-  - nosetests --with-cov --cov mrpy --cov-config .coveragerc --logging-level=INFO
-install:
-  - sudo apt-get install python-numpy python-scipy
-  - pip install mpmath
-  - pip install cached_property
-
 install:
   - conda install python=$TRAVIS_PYTHON_VERSION numpy scipy mpmath
   - conda install -c dan_blanchard python-coveralls nose-cov
   - pip install cached_property
 
-deploy:
-  user: stevenjeanette
-  on:
-    tags: true
-  provider: pypi
-  password:
-    secure: lAM0ScaCdOTbixtJf908INAKIpVCIPLSu4ZpqSxdp0zzMsTJJoTLo00wlmzzjeQDsxqgpiUIvjnwlpdur7Q+IPmwFa9hkg4VX4Mqe0keoDaoUQaUzpypZqYF0w4egVgc62NnXCGg3B/JuqUFuyM692uvmjvokGmadXLevXvPaxM=
+script:
+  - nosetests --with-coverage --cover-package mrpy
 
 
 # Calculate coverage
