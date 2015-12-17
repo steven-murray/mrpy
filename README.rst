@@ -3,21 +3,27 @@ mrpy
 
 A Python package for calculations with the MRP parameterisation of the Halo Mass Function.
 
+See Murray, Robotham, Power 2016 (in prep.) for more details on what the MRP is.
+
 .. image:: https://travis-ci.org/steven-murray/mrpy.png?branch=master
 		:target: https://travis-ci.org/steven-murray/mrpy
 .. image:: https://coveralls.io/repos/steven-murray/mrpy/badge.svg?branch=master&service=github
         :target: https://coveralls.io/github/steven-murray/mrpy?branch=master
 
+Quick Start
+-----------
+
 Installation
-------------
-Required packages are numpy, scipy and mpmath (for incomplete gamma functions).
-These should be automatically installed when installing ``mrpy``.
+++++++++++++
+Required packages are `numpy`, `scipy`, `mpmath` (for incomplete gamma functions),
+and `cached_property`.
+These should be automatically installed when installing `mrpy`.
 
 To install, simply use ``pip install git+git://github.com/steven-murray/mrpy.git``.
+This should install all dependencies and the `mrpy` package.
 
-Usage
------
-Currently, limited functionality is implemented.
+If this is not an option, manually download this repo and use ``python setup.py install``.
+In this case, you may need to manually install the dependencies first.
 
 Core Functionality
 ++++++++++++++++++
@@ -37,7 +43,7 @@ be normalised in a few different ways or returned as the log).
 Physical dependence
 +++++++++++++++++++
 The ``physical_dependence`` module contains a counterpart to the basic ``mrp``
-function, called ``mrp_b13``, which returns the MRP according to input
+function, called ``mrp_b13``, which returns the best-fit MRP according to input
 physical variables (redshift, matter density, rms mass variance). These are
 derived from fits to the theoretical mass function of Behroozi+2013. Example::
 
@@ -74,24 +80,11 @@ perfect MRP curve with known parameters). Options can be specified to constrain
 the normalisation either via the integral of the data, or the known mean density
 of the Universe (or some combination thereof).
 
-Utilities
-+++++++++
-Utility functions are located in the ``utilities`` module, and at the moment
-comprises just one function for generating samples from the MRP distribution,
-called as::
-
-    >>> from mrpy.utilities import generate_masses
-    >>> sample = generate_masses(N=14000,hs=14.0,alpha=-1.9,beta=0.8,mmin=10)
-
 Coming Soon
 -----------
 Upcoming features include:
 
-* Proper calculation of Hessians when fitting MRP to curves
 * Ability to fit robustly to samples of halos using downhill gradient methods.
 * Ability to use MCMC methods to fit to samples of halos
 * STAN modules for MCMC fits to halo samples with arbitrary mass uncertainty
-* Methods for defining Stellar-mass Halo-Mass relations
-* Implementation of a fast, analytic, ideal likelihood based on fitting to samples of halos drawn from a pure MRP distribution.
 * A useful re-parameterisation of the MRP
-* Online docs
