@@ -1,5 +1,8 @@
 """
-Definitions of all special functions used throughout ``mrpy``.
+Definitions of all special functions used throughout `mrpy`.
+
+Generally, these are adapted from `mpmath`, but return standard floats/arrays, and can take
+`array_like` input.
 """
 
 import numpy as np
@@ -9,80 +12,86 @@ from mpmath import hyper as _mp_hyper
 from mpmath import polygamma as _mp_pg
 from mpmath import meijerg as _mp_mg
 
+docs = """
+    {0} function.
+
+    .. note:: This is exactly as defined by `mpmath`, but modified to take
+              ``array_like`` arguments, and return results with type `float`.
+
+    Notes
+    -----
+    {1}
+"""
+def _flt(a):
+    try:
+        return a.astype('float')
+    except AttributeError:
+        return float(a)
+
 # The following extends the mpmath incomplete gamma to take vector args
-_ginc_vec = np.frompyfunc(lambda z, x: float(_mp_ginc(z, x)), 2, 1)
-def gammainc(z, x):
-    """
-    Incomplete gamma function, as defined by ``mpmath``, but modified to be able
-    to take vector arguments.
-
-    """
-    gammainc.__doc__ += _mp_ginc.__doc__
-
-    if hasattr(z, "__len__") or hasattr(x, "__len__"):
-        return _ginc_vec(z, x).astype("float")
-    else:
-        return float(_mp_ginc(z, x))
+_ginc_ufunc = np.frompyfunc(lambda z, x: _mp_ginc(z, x), 2, 1)
+def gammainc(z,x):
+    return _flt(_ginc_ufunc(z,x))
+gammainc.__doc__ =  docs.format("Upper incomplete gamma",_mp_ginc.__doc__)
 
 
 # The following extends the mpmath gamma to take vector args
-_g_vec = np.frompyfunc(lambda z: float(_mp_g(z)), 1, 1)
+_g_ufunc = np.frompyfunc(lambda z: _mp_g(z), 1, 1)
 def gamma(z):
-    """
-    Gamma function, as defined by ``mpmath``, but modified to be able
-    to take vector arguments.
-    """
-    gamma.__doc__ += _mp_g.__doc__
-
-    if hasattr(z, "__len__"):
-        return _g_vec(z).astype("float")
-    else:
-        return float(_mp_g(z))
-
-# The following extends the mpmath hyper function to take vector args
-_hyper = np.frompyfunc(lambda a, b, z: float(_mp_hyper(a, b, z)), 3, 1)
-def hyper(a,b,z):
-    """
-    Hypergeometric function, as defined by ``mpmath``, but modified to be able to
-    take vector arguments.
-    """
-    hyper.__doc__ += _mp_hyper.__doc__
-
-    if hasattr(a,"__len__") or hasattr(b,"__len__") or hasattr(z,"__len__"):
-        return _hyper(a,b,z).astype("float")
-    else:
-        return float(_mp_hyper(a,b,z))
+    return _flt(_g_ufunc(z))
+gamma.__doc__ =  docs.format("Gamma",_mp_g.__doc__)
 
 # The following extends the mpmath polygamma function to take vector args
-_pg = np.frompyfunc(lambda a, b, z: float(_mp_pg(a, b)), 2, 1)
-def polygamma(a,b):
+_pg_ufunc = np.frompyfunc(lambda a, b: _mp_pg(a, b), 2, 1)
+def polygamma(m,z):
+    return _flt(_pg_ufunc(m,z))
+polygamma.__doc__ = docs.format("Polygamma",_mp_pg.__doc__)
+
+
+# The following extends the mpmath meijerg function to take vector args
+_g1_ufunc = np.frompyfunc(lambda z,x: _mp_mg([[], [1, 1]], [[0, 0, z], []], x)/gammainc(z,x),2,1)
+def G1(z,x):
+    r"""
+    The Meijer-G function with specific arguments: ``meijerg([[], [1, 1]], [[0, 0, z], []], x)``,
+    normalised by the incomplete gamma function with arguments `z,x`.
+
+    Either `z` or `x` can be `array_like`.
+
+    Notes
+    -----
+    This quantity arises in the derivative of the natural log of the incomplete gamma function.
+
+    .. math:: \frac{d}{dz} \ln \Gamma(z,x) = G1(z,x) + \ln x
     """
-    Polygamma function, as defined by ``mpmath``, but modified to be able to
-    take vector arguments.
+    return _flt(_g1_ufunc(z,x))
+
+_g2_ufunc = np.frompyfunc(lambda z,x: _mp_mg([[], [1, 1,1]], [[0, 0,0, z], []], x)/gammainc(z,x),2,1)
+def G2(z,x):
+    r"""
+    The Meijer-G function with specific arguments: ``meijerg([[], [1, 1,1]], [[0, 0, 0, z], []], x)``,
+    normalised by the incomplete gamma function with arguments `z,x`.
+
+    Either `z` or `x` can be `array_like`.
+
+    Notes
+    -----
+    This quantity arises in the derivative of :func:`G1`.
     """
-    polygamma.__doc__ += _mp_pg.__doc__
+    return _flt(_g2_ufunc(z,x))
 
-    if hasattr(a,"__len__") or hasattr(b,"__len__"):
-        return _pg(a,b).astype("float")
-    else:
-        return float(_mp_pg(a,b))
-
-# The following extends the mpmath MeijerG function to take vector args
-_mg = np.frompyfunc(lambda a, b, z: float(_mp_mg(a, b)), 2, 1)
-def meijerg(a,b,z):
+# The following extends the mpmath hyper function to take vector args
+_hyperReg_2F2_ufunc = np.frompyfunc(lambda z,x: _mp_hyper([z,z], [z+1,z+1], -x)/gamma(z+1)**2,2,1)
+def hyperReg_2F2(z,x):
     """
-    Polygamma function, as defined by ``mpmath``, but modified to be able to
-    take vector arguments.
+    The regularised hypergeometric function with specific arguments: ``hyper([z,z],[z+1,z+1],-x)``.
+
+    Parameters
+    ----------
+    z : array_like
+    x : array_like
+
+    Returns
+    -------
+    array_like
     """
-    meijerg.__doc__ += _mp_mg.__doc__
-
-    if hasattr(a,"__len__") or hasattr(b,"__len__") or hasattr(z,"__len__"):
-        return _mg(a,b,z).astype("float")
-    else:
-        return float(_mp_mg(a,b,z))
-
-def hyperReg_vec(a, b, z):
-    return hyper(a, b, z) / np.product([gammaA(bb) for bb in b])
-
-def hyperReg(a, b, z):
-    return float(hyper(a, b, z) / np.product([gamma(bb) for bb in b]))
+    return _flt(_hyperReg_2F2_ufunc(z,x))
