@@ -3,3 +3,4 @@ dist
 mrpy.egg-info
 .idea/*
 *.pyc
+docs/_*
