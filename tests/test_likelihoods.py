@@ -8,6 +8,7 @@ sys.path.insert(0, LOCATION)
 
 from mrpy import mrp
 from mrpy.likelihoods import MRP_PO_Likelihood,MRP_Curve_Likelihood
+import numpy as np
 
 ## Define numerical jac/hess
 def numerical_jac_po(logm,hs,alpha,beta,scale=0,dx=0.0001):
@@ -84,8 +85,6 @@ def numerical_hess_curve(logm, dndm,logHs,alpha,beta,lnA,sig_rhomean=np.inf,sig_
                   numerical_jac_curve(logm, dndm,logHs,alpha,beta+dx,lnA,sig_rhomean,sig_integ,sig_data,scale,dx)-y0,
                   numerical_jac_curve(logm, dndm,logHs,alpha,beta,lnA+dx,sig_rhomean,sig_integ,sig_data,scale,dx)-y0])/dx
 
-from hmf import MassFunction
-h = MassFunction(Mmax=17,cut_fit=False)
 
 class TestCurve(object):
     def __init__(self):
