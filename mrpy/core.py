@@ -1,127 +1,103 @@
 """
-Basic MRP functions.
+Basic MRP functionality, such as functions to generate the MRP with different normalisations.
+
+Note that in this package, the `MRP` will refer to the truncated generalised gamma distribution
+(TGGD), with added arbitrary normalisation. We will always directly apply it to halo mass functions,
+(HMFs), and so the variate will generally be mass, *m*, and the relevant default scales will be large.
+
+This does not in principle restrict the usage of the MRP for other applications, such as luminosity
+functions or other data.
 """
 import numpy as np
 from special import gammainc, gamma
+from stats import TGGD
+from cached_property import cached_property as cached
 
-def ln_mrp_shape(m, hs, alpha, beta):
+
+def entire_integral(logHs, alpha, beta, s=1):
     r"""
-    The natural log of the shape of the MRP function, without normalisation:
-    :math:`\ln \left[\beta (m/H_s)^\alpha \exp(-(m/Hs)^\beta)\right].`
+    The entire integral of the un-normalised mass-weighted *non-truncated* MRP:
+
+    .. math:: \int_0^\infty m^s f(m) = \mathcal{H}_\star^{s+1} \Gamma\left(\frac{\alpha+1+s}{\beta}\right) \ dm.
+
+    where *s* defines a weighting of the integral, in which the immediate application is that
+    ``s=1`` gives the total mass density.
+
+    .. note:: The sum of `alpha` and `s` must be greater than -1.
 
     Parameters
     ----------
-    m : array_like
-        Vector of masses at which to evaluate the MRP
+    logHs : array_like
+        The base-10 logarithm of the scale mass, :math:`H_\star`.
 
-    hs : float
-        The base-10 logarithm of the scale mass, :math:`H_s`.
-
-    alpha : float
+    alpha : array_like
         The power-law index
 
-    beta : float
+    beta : array_like
         Exponential cutoff parameter
+
+    s : array_like, optional
+        Weighting (or `scaling`) of the integral.
+    """
+    return 10**((s + 1)*logHs)*gamma((alpha + 1 + s)/beta)
+
+def log_mass_mode(logHs,alpha,beta):
+    """
+    The mode of the log-space MRP weighted by mass.
+
+    Parameters
+    ----------
+    logHs, alpha, beta: array_like
+        Shape parameters of the MRP distribution.
 
     Returns
     -------
-    ln_mrp : array_like
-        The log MRP values corresponding to the vector ``m``.
+    lmm : array_like
+        The log-space mass mode of the MRP.
+
+    Examples
+    --------
+    This function:
+
+    >>> log_mass_mode(14.0,-1.8,0.7)
+    1.67016714698e+13
+
+    yields the same result as generating the mode via differentiation:
+
+    >>> from mrpy import stats
+    >>> from scipy.interpolate import InterpolatedUnivariateSpline as spline
+    >>> m = np.linspace(13.0,14.0,200)
+    >>> # Add 1 to alpha to generate mass weighting
+    >>> mrp = stats.TGGDlog(14.0,-1.8+1,0.7,m[0]).pdf(m,log=True)
+    >>> s = spline(m,mrp,k=4)
+    >>> 10**s.derivative().roots()[0]
+    1.67016715e+13
     """
-    lny = np.log(m) - hs*np.log(10)
-    return np.log(beta) + alpha * lny - np.exp(lny*beta)
+    if alpha > -2:
+        return 10**logHs * ((alpha+2)/beta)**(1./beta)
+    elif alpha == -2:
+        return np.nan
+    elif alpha <-2:
+        return 0
 
-
-def mrp_shape(m, hs, alpha, beta):
-    r"""
-    The shape of the MRP function, without normalisation:
-    :math:`\beta (m/H_s)^\alpha \exp(-(m/Hs)^\beta).`
-
-    Parameters
-    ----------
-    m : array_like
-        Vector of masses at which to evaluate the MRP
-
-    hs : float
-        The base-10 logarithm of the scale mass, :math:`H_s`.
-
-    alpha : float
-        The power-law index
-
-    beta : float
-        Exponential cutoff parameter
-
-    Returns
-    -------
-    mrp : array_like
-        The MRP values corresponding to the vector ``m``.
-    """
-    return  np.exp(ln_mrp_shape(m,hs,alpha,beta))
-
-def pdf_norm(hs,alpha,beta,mmin=-np.inf,mmax=np.inf):
-    """
-    The normalisation, A, required to render the MRP a statistical pdf:
-    :math:`A_1 = \mathcal{H}_s \Gamma(\frac{\alpha+1}{\beta},x)`.
-
-    Parameters
-    ----------
-    hs : float
-        The base-10 logarithm of the scale mass, :math:`H_s`.
-
-    alpha : float
-        The power-law index
-
-    beta : float
-        Exponential cutoff parameter
-
-    mmin : float, optional
-        Log-10 of the lower-truncation mass. Default is zero mass.
-
-    mmax : float, optional
-        Log-10 of the upper-truncation mass. Default is infinite mass.
-    """
-    z = (alpha+1.0)/beta
-
-    lower = np.where(np.isinf(mmin),gamma(z),gammainc(z,10**(beta*(mmin-hs))))
-
-    upper = 0.0
-    if not np.isinf(mmax):
-        upper = gammainc(z,10**(beta*(mmax-hs)))
-
-    return 1./(lower - upper)/10**hs
-
-def k(hs,alpha,beta):
-    r"""
-    The entire integral of the un-normalised mass-weighted MRP:
-    :math:`k \equiv \int_0^\infty dm m MRP(m) = \mathcal{H}_s^2 \Gamma(\frac{\alpha+2}{\beta}).`
-
-    Parameters
-    ----------
-    hs : float
-        The base-10 logarithm of the scale mass, :math:`H_s`.
-
-    alpha : float
-        The power-law index
-
-    beta : float
-        Exponential cutoff parameter
-    """
-    return 10**(2*hs) * gamma((alpha+2)/beta)
-
-def A_rhoc(hs,alpha,beta,Om0=0.3,rhoc=2.7755e11):
+def A_rhoc(logHs, alpha, beta, Om0=0.3, rhoc=2.7755e11):
     r"""
     The normalisation required to bind all matter in halos of some scale:
-    :math:`A_{}\rho_c} = \Omega_m \rho_c / k(\vec{\theta})`
+
+    .. math:: A_{\rho_c} = \Omega_m \rho_c / k(\vec{\theta})
+
+    where *k* is the :func:`entire_integral` of the MRP, with a mass-weighting
+    (or scaling) of ``s=1``.
 
     Parameters
     ----------
-    hs : float
+    logHs : array_like
         The base-10 logarithm of the scale mass, :math:`H_s`.
 
-    alpha : float
+    alpha : array_like
         The power-law index
 
-    beta : float
+    beta : array_like
         Exponential cutoff parameter
 
     Om0 : float, optional
@@ -130,26 +106,53 @@ def A_rhoc(hs,alpha,beta,Om0=0.3,rhoc=2.7755e11):
     rhoc : float, optional
         The critical density of the Universe.
     """
-    return Om0*rhoc/k(hs,alpha,beta)
+    return Om0*rhoc/entire_integral(logHs, alpha, beta, s=1)
 
-def log_mass_mode(hs,alpha,beta):
-    r"""
-    The (log) mode of the MRP weighted by mass in log-space:
-    :math:`H_s \sqrt{\beta}{z+1/\beta}`.
-    """
-    return hs + np.log10((alpha+2)/beta)/beta
 
-def mrp(m, hs,alpha,beta,mmin=None,mmax=np.inf,norm="pdf",log=False,**Arhoc_kw):
-    """
-    The MRP distribution.
+# def log_mass_mode(logHs,alpha,beta):
+#     r"""
+#     The (log) mode of the MRP weighted by mass in log-space:
+#     :math:`H_s \sqrt{\beta}{z+1/\beta}`.
+#     """
+#     return logHs + np.log10((alpha+2)/beta)/beta
 
+
+def _getnorm(norm, logHs, alpha, beta, mmin, log=False, **Arhoc_kw):
+    if norm == "pdf":
+        return 1./TGGD(scale=10**logHs, a=alpha, b=beta, xmin=mmin)._pdf_norm(log)
+    elif np.all(np.isreal(norm)):
+        return norm
+    elif norm == "rhoc":
+        return A_rhoc(logHs, alpha, beta, **Arhoc_kw)
+    else:
+        ValueError("norm should be a float, or the strings 'pdf' or 'rhoc'")
+
+
+def _head(m, logHs, alpha, beta, mmin=None, norm="pdf", log=False, **Arhoc_kw):
+    if mmin is None:
+        mmin = m.min()
+
+    tggd = TGGD(a=alpha, b=beta, xmin=mmin, scale=10**logHs)
+
+    A = _getnorm(norm, logHs, alpha, beta, mmin, log, **Arhoc_kw)
+    return tggd, A
+
+
+def _tail(shape, A, log):
+    if log:
+        return shape + A
+    else:
+        return shape*A
+
+
+_pardoc = """
     Parameters
     ----------
     m : array_like
         Vector of masses at which to evaluate the MRP
 
-    hs : float
-        The base-10 logarithm of the scale mass, :math:`H_s`.
+    logHs : float
+        The base-10 logarithm of the scale mass, :math:`H_\star`.
 
     alpha : float
         The power-law index
@@ -158,166 +161,272 @@ def mrp(m, hs,alpha,beta,mmin=None,mmax=np.inf,norm="pdf",log=False,**Arhoc_kw):
         Exponential cutoff parameter
 
     mmin : float, optional
-        Log-10 of the lower-truncation mass. Default is the minimum mass in ``m``.
+        The lower-truncation mass. Default is the minimum mass in ``m``.
 
-    mmax : float, optional
-        Log-10 of the upper-truncation mass. Default is infinite mass.
-
-    norm : None, string or float
+    norm :string or float, optional
+        Gives the normalisation of the MRP, *A*. If set to a *float*, it
+        is directly the normalisation. If set to ``"pdf"``, it will automatically
+        render the MRP as a statistical distribution. If set to ``"rhoc"``, it will
+        yield the correct total mass density across all masses, down to ``m=0``.
 
     log : logical
         Whether to return the natural log of the MRP (suitable for Bayesian
         likelihoods).
 
     \*\*Arhoc_kw :
-        Arguments directly forwarded to the mean-density normalisation.
+        Arguments directly forwarded to the mean-density normalisation, :func:`A_rhoc`.
     """
-    if mmin is None:
-        mmin = np.log10(m.min())
-    if mmax is None:
-        mmax = np.log10(m.max())
 
 
-    ln_shape = ln_mrp_shape(m,hs,alpha,beta)
-
-    if norm == "pdf":
-        A = pdf_norm(hs,alpha,beta,mmin,mmax)
-    elif np.isreal(norm):
-        A = norm
-    elif norm == "rhoc":
-        A = A_rhoc(hs,alpha,beta,**Arhoc_kw)
-    else:
-        ValueError("norm should be a float, or the strings 'pdf' or 'rhoc'")
-    if log:
-        return ln_shape + np.log(A)
-    else:
-        return np.exp(ln_shape)*A
-
-def ngtm(m,hs,alpha,beta,mmin=None,mmax=np.inf,norm="cdf",log=False,**Arhoc_kw):
+def mrp(m, logHs, alpha, beta, mmin=None, norm="pdf", log=False, **Arhoc_kw):
     """
-    The integal of the MRP, in reverse (i.e. CDF=1 at mmin).
+    The MRP distribution.
 
-    Parameters
-    ----------
-    m : array_like
-        Vector of masses at which to evaluate the MRP
-
-    hs : float
-        The base-10 logarithm of the scale mass, :math:`H_s`.
-
-    alpha : float
-        The power-law index
-
-    beta : float
-        Exponential cutoff parameter
-
-    mmin : float, optional
-        Log-10 of the lower-truncation mass. Default is the minimum mass in ``m``.
-
-    mmax : float, optional
-        Log-10 of the upper-truncation mass. Default is infinite mass.
-
+    %s
     """
-    if mmin is None:
-        mmin = np.log10(m.min())
-    if mmax is None:
-        mmax = np.log10(m.max())
 
-    # the shape is just the integral, but using m instead of mmin
-    shape = 1./pdf_norm(hs,alpha,beta,mmin=np.log10(m))
-
-    if norm == "cdf":
-        A = pdf_norm(hs,alpha,beta,mmin,mmax)
-    elif np.isreal(norm):
-        A = norm
-    elif norm == "rhoc":
-        A = A_rhoc(hs,alpha,beta,**Arhoc_kw)
-    else:
-        ValueError("norm should be a float, or the strings 'cdf' or 'rhoc'")
-
-    if log:
-        return np.log(shape) + np.log(A)
-    else:
-        return shape*A
+    t, A = _head(m, logHs, alpha, beta, mmin, norm, log, **Arhoc_kw)
+    shape = t._pdf_shape(m, log)
+    return _tail(shape, A, log)
 
 
-def rho_gtm(m,hs,alpha,beta,mmin=None,mmax=np.inf,norm="pdf",log=False,**Arhoc_kw):
+mrp.__doc__ %= _pardoc
+
+
+def ngtm(m, logHs, alpha, beta, mmin=None, mmax=np.inf, norm="pdf", log=False, **Arhoc_kw):
+    """
+    The integral of the MRP, in reverse (i.e. CDF=1 at mmin).
+
+    %s
+    """
+    t, A = _head(m, logHs, alpha, beta, mmin, norm, log, **Arhoc_kw)
+    t = TGGD(a=alpha, b=beta, xmin=m, scale=10**logHs)
+    shape = t._pdf_norm(log)
+
+    return _tail(shape, A, log)
+
+
+ngtm.__doc__ %= _pardoc
+
+
+def rho_gtm(m, logHs, alpha, beta, mmin=None, mmax=np.inf, norm="pdf", log=False, **Arhoc_kw):
     """
     The mass-weighted integral of the MRP, in reverse (ie. from high to low mass)
 
+    %s
+    """
+    t, A = _head(m, logHs, alpha, beta, mmin, norm, log, **Arhoc_kw)
+    shape = 10**(2*logHs)*gammainc((alpha + 2)/beta, (m/10**logHs)**beta)
+    if log:
+        shape = np.log(shape)
+    return _tail(shape, A, log)
+
+
+rho_gtm.__doc__ %= _pardoc
+
+
+# def get_alpha_and_A(logHs, beta, mmin, mw_integ, Om0, s=0, rhoc=2.7755e11):
+#     r"""
+#     Recover alpha and normalisation, A, given known total mass density, and
+#     given (mass-scaled) integral of data down to mmin. Specifically, solve the system:
+#
+#     ..math :: A = \frac{\Omega_m \rho_c}{\H_s^2 \Gamma(\frac{\alpha+2}{\beta})}
+#
+#     ..math :: A = \frac{I_s}{H_s^{s+1}\Gamma(\frac{\alpha+s+1}{\beta},(m/H_s)^\beta)},
+#
+#     where :math:`I_s` is the integral of the mass function (specified by the data),
+#     multiplied by a mass-weight, i.e., :math:`m^s`.
+#
+#     Combining the two equations, we can solve for :math:`\alpha`, but the solution
+#     is gained by root-finding using Newton's method.
+#
+#     ..note :: This routine necessarily returns an alpha greater than -2, otherwise
+#               the total mass density is undefined.
+#     """
+#     rhomean = rhoc*Om0
+#
+#     def f(lnz):
+#         """
+#         Function whose root will yield correct alpha.
+#
+#         Input is lnz = ln((alpha+2)/beta)
+#         """
+#         return rhomean/gamma(np.exp(lnz)) - mw_integ/(
+#         10**(logHs*(s - 1))*gammainc(np.exp(lnz) + (s - 1)/beta, 10**(beta*(mmin - logHs))))
+#
+#     lnz = newton(f, np.log(0.1/beta))
+#     alpha = np.exp(lnz)*beta - 2
+#     A = A_rhoc(logHs, alpha, beta, Om0, rhoc)
+#
+#     return alpha, A
+
+
+
+
+class MRP(object):
+    """
+    An MRP object.
+
+    This class contains methods for calculating typical quantities of interest:
+    the differential/cumulative number densities, as well as mass densities, and
+    several types of normalisation. Also included is a pointer to underlying
+    statistical quantities, such as mean, median, mode etc.
+
     Parameters
     ----------
-    m : array_like
-        Vector of masses at which to evaluate the MRP
+    logm : array_like
+        Vector of log10 masses.
 
-    hs : float
-        The base-10 logarithm of the scale mass, :math:`H_s`.
+    logHs, alpha, beta : array_like
+        The shape parameters of the MRP.
 
-    alpha : float
-        The power-law index
+    norm : float or string
+        Gives the normalisation of the MRP, *A*. If set to a *float*, it
+        is directly the normalisation. If set to ``"pdf"``, it will automatically
+        render the MRP as a statistical distribution. If set to ``"rhoc"``, it will
+        yield the correct total mass density across all masses, down to ``m=0``.
 
-    beta : float
-        Exponential cutoff parameter
+    log_mmin : array_like, optional
+        Log-10 truncation mass of the MRP. By default is set to the minimum mass
+        in ``logm``.
 
-    mmin : float, optional
-        Log-10 of the lower-truncation mass. Default is the minimum mass in ``m``.
+    Om0 : float, optional
+        Matter density of the Universe. Only required if `norm` is set to ``Arhoc``.
 
-    mmax : float, optional
-        Log-10 of the upper-truncation mass. Default is infinite mass.
-
+    rhoc : float, optional
+        Crtical density of the Universe. Only required if `norm` is set to ``Arhoc``.
     """
-    if mmin is None:
-        mmin = np.log10(m.min())
-    if mmax is None:
-        mmax = np.log10(m.max())
 
-    # the shape is just the integral, but using m instead of mmin
-    shape = 10**(2*hs) * gammainc((alpha+2)/beta,(m/10**hs)**beta)
+    def __init__(self, logm, logHs, alpha, beta, norm="pdf",log_mmin=None,
+                 Om0=0.3, rhoc=2.7755e11):
+        self.logm = logm
+        if log_mmin is not None:
+            self.log_mmin = log_mmin
+        else:
+            try:
+                self.log_mmin = logm.min()
+            except:
+                self.log_mmin = logm
 
-    if norm == "pdf":
-        A = pdf_norm(hs,alpha,beta,mmin,mmax)
-    elif np.isreal(norm):
-        A = norm
-    elif norm == "rhoc":
-        A = A_rhoc(hs,alpha,beta,**Arhoc_kw)
-    else:
-        ValueError("norm should be a float, or the strings 'pdf' or 'rhoc'")
+        self.logHs = logHs
+        self.alpha = alpha
+        self.beta = beta
+        self._norm = norm
+        self._Arhoc_kw = {"Om0":Om0,"rhoc":rhoc}
 
-    if log:
-        return np.log(shape) + np.log(A)
-    else:
-        return shape*A
-
-
-def get_alpha_and_A(hs,beta, mmin, mw_integ, Om0,s=0,rhoc=2.7755e11):
-    r"""
-    Recover alpha and normalisation, A, given known total mass density, and
-    given (mass-scaled) integral of data down to mmin. Specifically, solve the system:
-
-    ..math :: A = \frac{\Omega_m \rho_c}{\H_s^2 \Gamma(\frac{\alpha+2}{\beta})}
-
-    ..math :: A = \frac{I_s}{H_s^{s+1}\Gamma(\frac{\alpha+s+1}{\beta},(m/H_s)^\beta)},
-
-    where :math:`I_s` is the integral of the mass function (specified by the data),
-    multiplied by a mass-weight, i.e., :math:`m^s`.
-
-    Combining the two equations, we can solve for :math:`\alpha`, but the solution
-    is gained by root-finding using Newton's method.
-
-    ..note :: This routine necessarily returns an alpha greater than -2, otherwise
-              the total mass density is undefined.
-    """
-    rhomean = rhoc * Om0
-    def f(lnz):
+    @property
+    def m(self):
         """
-        Function whose root will yield correct alpha.
-
-        Input is lnz = ln((alpha+2)/beta)
+        Real-space masses
         """
-        return rhomean/gamma(np.exp(lnz)) - mw_integ/(10**(hs*(s-1))*gammainc(np.exp(lnz) + (s-1)/beta,10**(beta*(mmin-hs))))
+        return 10**self.logm
 
-    lnz = newton(f, np.log(0.1/beta))
-    alpha = np.exp(lnz) * beta - 2
-    A = A_rhoc(hs,alpha,beta,Om0,rhoc)
+    @property
+    def mmin(self):
+        """
+        Real-space truncation mass
+        """
+        return 10**self.log_mmin
 
-    return alpha,A
+    @property
+    def Hs(self):
+        """
+        Real-space scale mass.
+        """
+        return 10**self.logHs
+
+    @property
+    def stats(self):
+        """
+        An object containing statistical quantities of the MRP.
+
+        This is basically a :class:`mrpy.stats.TGGD` class.
+        """
+        return TGGD(scale=self.Hs, a=self.alpha, b=self.beta, xmin=self.mmin)
+
+    @property
+    def lnA(self):
+        """
+        Natural log of the normalisation
+        """
+        return _getnorm(self._norm, self.logHs, self.alpha, self.beta,
+                        self.mmin, log=True, **self._Arhoc_kw)
+
+    @property
+    def A(self):
+        """Normalisation of the MRP"""
+        return np.exp(self.lnA)
+
+    # =============================================================================
+    # Principal Vector Quantities
+    # =============================================================================
+    def mrp(self, log=False):
+        """
+        Return the MRP at `m`.
+
+        Parameters
+        ----------
+        log : logical, optional
+            Whether to return the natural log of the MRP.
+        """
+        return mrp(self.m, self.logHs, self.alpha, self.beta, mmin=self.log_mmin,
+                   norm=self.norm, log=log)
+
+    def ngtm(self, log=False):
+        """
+        The number density greater than `mmin`.
+
+        Parameters
+        ----------
+        log : logical
+            Whether to return the natural log of the number density.
+        """
+        return ngtm(self.m, self.logHs, self.alpha, self.beta, mmin=self.log_mmin,
+                    norm=self.norm, log=log)
+
+    def rho_gtm(self,log=False):
+        """
+        The mass-weighted integral of the MRP, in reverse (ie. from high to low mass).
+
+
+        Parameters
+        ----------
+        log : logical
+            Whether to return the natural log of the density.
+
+        """
+        return rho_gtm(self.m, self.logHs, self.alpha, self.beta, mmin=self.log_mmin,
+                       norm=self.norm, log=log)
+
+    # =============================================================================
+    # Derived Scalar Quantities
+    # =============================================================================
+    @cached
+    def log_mass_mode(self):
+        """
+        The mode of the log-space MRP weighted by mass
+        """
+        return log_mass_mode(self.logHs, self.alpha, self.beta)
+
+    @cached
+    def _k(self):
+        """
+        The integral of the mass-weighted MRP down to ``m=0`` (i.e. disregarding
+        the truncation mass).
+        """
+        return entire_integral(self.logHs, self.alpha, self.beta)
+
+
+    @cached
+    def nbar(self):
+        """
+        Total number density above truncation mass.
+        """
+        return self.ngtm()[0]
+
+    @cached
+    def rhobar(self):
+        """
+        Total mass density above truncation mass.
+        """
+        return self.rho_gtm()[0]
