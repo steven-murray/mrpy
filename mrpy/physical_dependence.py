@@ -2,7 +2,19 @@
 Module containing functions for the dependence of MRP parameters on physical
 parameters, defined with respect to Behroozi+13.
 
+The values output by the functions in this module were derived as part of the study
+reported in Murray, Robotham and Power (2016). See that paper for details on the
+fits used.
 
+In brief, three physical parameters were varied -- matter density, rms fluctuation
+:math:`\sigma_8` and redshift -- around the best-fit values from Planck+13, and up
+to a redshift of 8. For each, the Behroozi+13 mass function was calculated using
+the `hmf` python package over a range of masses corresponding to (lm-3, lm+2), where
+*lm* is the log mass mode. The MRP was fit to each curve, and then the best-fit parameters
+were parameterised as a function of the physical parameters using the Eureqa software.
+
+.. note:: Given the way these parameterisations were determined, it is not advised to
+          trust these values far from the log-mass-mode of each fit.
 """
 import numpy as np
 from core import mrp
