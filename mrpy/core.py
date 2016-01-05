@@ -186,7 +186,7 @@ _pardoc = """
     """
 
 
-def mrp(m, logHs, alpha, beta, mmin=None, norm="pdf", log=False, **Arhoc_kw):
+def dndm(m, logHs, alpha, beta, mmin=None, norm="pdf", log=False, **Arhoc_kw):
     """
     The MRP distribution.
 
@@ -197,7 +197,7 @@ def mrp(m, logHs, alpha, beta, mmin=None, norm="pdf", log=False, **Arhoc_kw):
     return _tail(shape, A, log)
 
 
-mrp.__doc__ %= _pardoc
+dndm.__doc__ %= _pardoc
 
 
 def ngtm(m, logHs, alpha, beta, mmin=None, mmax=np.inf, norm="pdf", log=False, **Arhoc_kw):
@@ -367,7 +367,7 @@ class MRP(object):
     # =============================================================================
     # Principal Vector Quantities
     # =============================================================================
-    def mrp(self, log=False):
+    def dndm(self, log=False):
         """
         Return the MRP at `m`.
 
@@ -376,7 +376,7 @@ class MRP(object):
         log : logical, optional
             Whether to return the natural log of the MRP.
         """
-        return mrp(self.m, self.logHs, self.alpha, self.beta, mmin=self.log_mmin,
+        return dndm(self.m, self.logHs, self.alpha, self.beta, mmin=self.log_mmin,
                    norm=self.A, log=log)
 
     def ngtm(self, log=False):

@@ -17,7 +17,7 @@ def test_pdf_inf():
     """
     m = np.logspace(10,17,500)
     for i in range(10):
-        ans =  simps(core.mrp(m,3*rd()+10,0.2*rd()-2.0,0.5*rd()+0.5,norm="pdf"),m)
+        ans =  simps(core.dndm(m,3*rd()+10,0.2*rd()-2.0,0.5*rd()+0.5,norm="pdf"),m)
         err = np.abs(ans-1)
         print err
         assert np.abs(ans-1) < 1e-4
@@ -38,7 +38,7 @@ def test_Arhoc():
     # Try A_rhoc
     m = np.logspace(0,17,2000)
     for i in range(100):
-        ans =  simps(core.mrp(m,3*rd()+10,-1.5,0.5*rd()+0.5,norm="rhoc",Om0=0.3)*m,m)/(0.3*2.7755e11)
+        ans =  simps(core.dndm(m,3*rd()+10,-1.5,0.5*rd()+0.5,norm="rhoc",Om0=0.3)*m,m)/(0.3*2.7755e11)
         err = np.abs(ans-1)
         print err
         assert np.abs(ans-1) < 1e-4
@@ -74,7 +74,7 @@ class TestMRP(object):
         assert np.all(self.mrp.Hs == 10**14.0)
 
     def test_pdf(self):
-        assert np.isclose(simps(self.mrp.mrp(),self.mrp.m),1.0)
+        assert np.isclose(simps(self.mrp.dndm(),self.mrp.m),1.0)
 
     def test_nbar(self):
         print self.mrp.A, self.mrp.lnA
