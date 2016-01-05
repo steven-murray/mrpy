@@ -119,11 +119,19 @@ def A_rhoc(logHs, alpha, beta, Om0=0.3, rhoc=2.7755e11):
 
 def _getnorm(norm, logHs, alpha, beta, mmin, log=False, **Arhoc_kw):
     if norm == "pdf":
-        return 1./TGGD(scale=10**logHs, a=alpha, b=beta, xmin=mmin)._pdf_norm(log)
+        x = TGGD(scale=10**logHs, a=alpha, b=beta, xmin=mmin)._pdf_norm(log)
+        if log:
+            return -x
+        else:
+            return 1./x
     elif np.all(np.isreal(norm)):
         return norm
     elif norm == "rhoc":
-        return A_rhoc(logHs, alpha, beta, **Arhoc_kw)
+        x =  A_rhoc(logHs, alpha, beta, **Arhoc_kw)
+        if log:
+            return np.log(x)
+        else:
+            return x
     else:
         ValueError("norm should be a float, or the strings 'pdf' or 'rhoc'")
 
@@ -184,7 +192,6 @@ def mrp(m, logHs, alpha, beta, mmin=None, norm="pdf", log=False, **Arhoc_kw):
 
     %s
     """
-
     t, A = _head(m, logHs, alpha, beta, mmin, norm, log, **Arhoc_kw)
     shape = t._pdf_shape(m, log)
     return _tail(shape, A, log)
@@ -370,7 +377,7 @@ class MRP(object):
             Whether to return the natural log of the MRP.
         """
         return mrp(self.m, self.logHs, self.alpha, self.beta, mmin=self.log_mmin,
-                   norm=self.norm, log=log)
+                   norm=self.A, log=log)
 
     def ngtm(self, log=False):
         """
@@ -382,7 +389,7 @@ class MRP(object):
             Whether to return the natural log of the number density.
         """
         return ngtm(self.m, self.logHs, self.alpha, self.beta, mmin=self.log_mmin,
-                    norm=self.norm, log=log)
+                    norm=self.A, log=log)
 
     def rho_gtm(self,log=False):
         """
@@ -396,7 +403,7 @@ class MRP(object):
 
         """
         return rho_gtm(self.m, self.logHs, self.alpha, self.beta, mmin=self.log_mmin,
-                       norm=self.norm, log=log)
+                       norm=self.A, log=log)
 
     # =============================================================================
     # Derived Scalar Quantities
