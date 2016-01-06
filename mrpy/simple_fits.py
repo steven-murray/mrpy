@@ -3,12 +3,10 @@ Routines that implement simple least-squares fits directly to dn/dm without erro
 Typically used for fitting directly to theoretical functions from EPS theory.
 """
 import numpy as np
-from core import mrp, pdf_norm, A_rhoc, get_alpha_and_A
+from core import dndm
 from scipy.optimize import minimize
 from scipy.integrate import simps
-from special import gamma, gammainc
-from scipy.optimize import newton
-from likelihoods import MRP_Curve_Likelihood, MRP_PO_Likelihood
+from likelihoods import CurveLike, PerObjLike
 
 
 def get_fit_curve(*args, **kwargs):
@@ -32,7 +30,7 @@ def get_fit_curve(*args, **kwargs):
     else:
         m = kwargs['m']
 
-    fit = mrp(m, res[0], res[1], res[2], mmin=np.log10(m.min()), mmax=np.log10(m.max()),
+    fit = dndm(m, res[0], res[1], res[2], mmin=np.log10(m.min()), mmax=np.log10(m.max()),
               norm=np.exp(res[3]))
     return res, fit
 
@@ -123,7 +121,7 @@ def fit_curve(m, dndm, hs0=14.5, alpha0=-1.9, beta0=0.8, lnA0=-40, mmax=np.inf,
             alpha = 0
             hs, beta = p
 
-        _curve = MRP_Curve_Likelihood(logm=np.log10(m), logHs=hs, alpha=alpha, beta=beta, lnA=lnA,
+        _curve = CurveLike(logm=np.log10(m), logHs=hs, alpha=alpha, beta=beta, lnA=lnA,
                                       sig_rhomean=sigma_rhomean, sig_integ=sigma_integ, scale=s, mw_data=mw_data,
                                       mw_integ=mass_weighted_integ)
         if jac:
@@ -136,7 +134,7 @@ def fit_curve(m, dndm, hs0=14.5, alpha0=-1.9, beta0=0.8, lnA0=-40, mmax=np.inf,
         if bounds:
             bounds = [hs_bounds, beta_bounds]
         res = minimize(model, p0, bounds=bounds, jac=jac, **minimize_kw)
-        _c = MRP_Curve_Likelihood(logm=np.log10(m), logHs=res.x[0], alpha=res.x[1], beta=res.x[2], lnA=0,
+        _c =CurveLike(logm=np.log10(m), logHs=res.x[0], alpha=res.x[1], beta=res.x[2], lnA=0,
                                   sig_rhomean=sigma_rhomean, sig_integ=sigma_integ, scale=s, mw_data=mw_data,
                                   mw_integ=mass_weighted_integ)
         lnA = _c.lnA
@@ -149,7 +147,7 @@ def fit_curve(m, dndm, hs0=14.5, alpha0=-1.9, beta0=0.8, lnA0=-40, mmax=np.inf,
         if bounds: bounds = [hs_bounds, alpha_bounds, beta_bounds]
         res = minimize(model, p0, bounds=bounds, jac=jac, **minimize_kw)
         out = np.concatenate(
-            (res.x, [MRP_Curve_Likelihood(logm=np.log10(m), logHs=res.x[0], alpha=res.x[1], beta=res.x[2], lnA=0,
+            (res.x, [CurveLike(logm=np.log10(m), logHs=res.x[0], alpha=res.x[1], beta=res.x[2], lnA=0,
                                           sig_rhomean=sigma_rhomean, sig_integ=sigma_integ, scale=s, mw_data=mw_data,
                                           mw_integ=mass_weighted_integ).lnA]))
 
@@ -158,7 +156,7 @@ def fit_curve(m, dndm, hs0=14.5, alpha0=-1.9, beta0=0.8, lnA0=-40, mmax=np.inf,
         if bounds: bounds = [hs_bounds, alpha_bounds, beta_bounds]
         res = minimize(model, p0, bounds=bounds, jac=jac, **minimize_kw)
         out = np.concatenate(
-            (res.x, [MRP_Curve_Likelihood(logm=np.log10(m), logHs=res.x[0], alpha=res.x[1], beta=res.x[2], lnA=0,
+            (res.x, [CurveLike(logm=np.log10(m), logHs=res.x[0], alpha=res.x[1], beta=res.x[2], lnA=0,
                                           sig_rhomean=sigma_rhomean, sig_integ=sigma_integ, scale=s, mw_data=mw_data,
                                           mw_integ=mass_weighted_integ).lnA]))
 
@@ -221,7 +219,7 @@ def fit_per_object(m, hs0=14.5, alpha0=-1.9, beta0=0.8, lnA0=-40, mmax=np.inf,
 
     # Define the objective function for minimization.
     def model(p):
-        _curve = MRP_PO_Likelihood(scale=s, logm=np.log10(m), logHs=p[0], alpha=p[1], beta=p[2])
+        _curve = PerObjLike(scale=s, logm=np.log10(m), logHs=p[0], alpha=p[1], beta=p[2])
 
         if jac:
             return -_curve.lnL, -_curve.jacobian
