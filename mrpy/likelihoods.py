@@ -727,19 +727,31 @@ class CurveLike(PerObjLike):
     # Basic likelihood
     # ===========================================================================
     @cached
+    def _fdata(self):
+        return self._lng + self.scale*self.logHs*ln10 - np.log(self.mw_data)
+
+    @cached
     def _delta_data(self):
         """
         Distance between log theory and log data
         """
-        return self.lnA + self._lng + self.scale*self.logHs*ln10 - np.log(self.mw_data)
+        return self.lnA + self._fdata
+
+    @cached
+    def _fint(self):
+        return -np.log(self.mw_integ/self._q_) + self.scale*self.logHs*ln10
 
     @cached
     def _delta_integ(self):
-        return self.lnA - np.log(self.mw_integ/self._q_) + self.scale*self.logHs*ln10
+        return self.lnA + self._fint
+
+    @cached
+    def _frho(self):
+        return - np.log(core.A_rhoc(self.logHs, self.alpha, self.beta, self.Om0, self.rhoc))
 
     @cached
     def _delta_rhomean(self):
-        return self.lnA - np.log(core.A_rhoc(self.logHs, self.alpha, self.beta, self.Om0, self.rhoc))
+        return self.lnA + self._frho
 
     @cached
     def _lnLi(self):
@@ -815,16 +827,28 @@ class CurveLike(PerObjLike):
     # Jacobian etc.
     # ===========================================================================
     @cached
+    def _fdata_jac(self):
+        return np.array([self._lng_h + self.scale*ln10, self._lng_a, self._lng_b])
+
+    @cached
     def _delta_data_jac(self):
-        return np.array([self._lng_h + self.scale*ln10, self._lng_a, self._lng_b, np.ones_like(self.m)])
+        return np.vstack((self._fdata_jac, np.ones_like(self.m)))
+
+    @cached
+    def _fint_jac(self):
+        return np.array([self._lnq_h_ + self.scale*ln10, self._lnq_a_, self._lnq_b_])
 
     @cached
     def _delta_integ_jac(self):
-        return np.array([self._lnq_h_ + self.scale*ln10, self._lnq_a_, self._lnq_b_, 1])
+        return np.concatenate((self._fint_jac, [1]))
+
+    @cached
+    def _frho_jac(self):
+        return self._lnk_jac
 
     @cached
     def _delta_rhomean_jac(self):
-        return np.array([self._lnk_h, self._lnk_a, self._lnk_b, 1])
+        return np.concatenate((self._frho_jac,[1]))
 
     @property
     def jacobian(self):
@@ -914,8 +938,16 @@ class CurveLike(PerObjLike):
         return np.outer(self._delta_integ_jac, self._delta_integ_jac)
 
     @cached
+    def _frho_jac_sq(self):
+        return np.outer(self._frho_jac,self._frho_jac)
+
+    @cached
     def _delta_rhomean_jac_sq(self):
         return np.outer(self._delta_rhomean_jac, self._delta_rhomean_jac)
+
+    @cached
+    def _fint_jac_sq(self):
+        return np.outer(self._fint_jac,self._fint_jac)
 
     @cached
     def _delta_data_hess(self):
@@ -934,6 +966,17 @@ class CurveLike(PerObjLike):
         out = np.zeros((4, 4))
         out[:-1, :-1] = self._lnk_hess
         return out
+
+    @cached
+    def _gradsum(self):
+        data = np.sum(self._fdata_jac/self.sig_data**2,axis=-1)
+        integ = np.zeros(3)
+        rhom = np.zeros(3)
+        if self.sig_integ != 0:
+            integ = self._fint_jac/self.sig_integ**2
+        if self.sig_rhomean != 0:
+            rhom = self._frho_jac/self.sig_rhomean**2
+        return data + integ + rhom
 
     @property
     def hessian(self):
@@ -966,19 +1009,26 @@ class CurveLike(PerObjLike):
         elif self.sig_rhomean == 0:
             # TODO: Hessians for 3-vector cases.
             raise NotImplementedError()
-            standard = -(data_term + erri)
-            second = self._lnk_xy*self._simple_sum
-            grads = np.sum((self._delta_data_jac.T - self._delta_integ_jac)/self.sig_data**2, axis=0) - \
-                    (self._delta_integ_jac - self._delta_rhomean_jac)/self.sig_integ**2
-            # third = -np.outer(self.jacobian ,self._delta_rhomean_jac[:-1])#(np.sum(self._lnkx_lngy/self.sig_data**2,axis=-1) + self._lnkx_lnky/self.sig_integ**2)
-            return standard[:-1, :-1] + second + grads[:-1]
+
+            ## the following seems right, but doesn't give correct results in tests. More work needed...
+
+            # data term first
+            grad3_delta = np.sum((self._fdata_jac.T - self._frho_jac)/self.sig_data**2,axis=0)
+            t1 = np.outer(grad3_delta,grad3_delta)
+            t2 = np.sum(self._delta_data * (self._lng_hess.T - self._lnk_hess).T/self.sig_data**2,axis=-1)
+            errd = t1+t2
+
+            erri = 0
+            ## Integ term if necessary
+            if not np.isinf(self.sig_integ):
+                grad3_delta = (self._fint_jac - self._frho_jac)/self.sig_int**2
+                t1 = np.outer(grad3_delta,grad3_delta)
+                t2 = self._delta_integ * (self._lnq_hess - self._lnk_hess)/self.sig_integ**2
+                erri = t1+t2
+
+            return -(errd+erri)
+
         elif self.sig_integ == 0:
             raise NotImplementedError()
-            standard = -(data_term + errm)
-            second = self._lnq_xy*self._simple_sum
-            grads = np.sum((self._delta_data_jac.T - self._delta_rhomean_jac)/self.sig_data**2, axis=0) + \
-                    (self._delta_integ_jac - self._delta_rhomean_jac)/self.sig_rhomean**2
-            # third = -np.outer(self.jacobian , self._delta_integ_jac[:-1])#(np.sum(self._lnqx_lngy/self.sig_data**2,axis=-1) + self._lnqx_lnqy/self.sig_rhomean**2)
-            return standard[:-1, :-1] + second + grads[:-1]
         else:
             return -(errd + errm + erri)
