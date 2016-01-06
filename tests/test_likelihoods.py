@@ -1,145 +1,175 @@
-import numpy as np
 import inspect
 import os
+
 LOCATION = "/".join(os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe()))).split("/")[:-1])
 # from nose.tools import raises
 import sys
+
 sys.path.insert(0, LOCATION)
 
-from mrpy import mrp
-from mrpy.likelihoods import MRP_PO_Likelihood,MRP_Curve_Likelihood
+from mrpy import dndm
+from mrpy.likelihoods import PerObjLike, CurveLike
+from mrpy._utils import numerical_hess, numerical_jac
 import numpy as np
+from mrpy.stats import TGGD
+from mrpy.core import dndm
+from scipy.integrate import simps
 
-## Define numerical jac/hess
-def numerical_jac_po(logm,hs,alpha,beta,scale=0,dx=0.0001):
-    base = MRP_PO_Likelihood(scale=scale,logm = logm,logHs=hs,alpha=alpha,beta=beta)
-    return np.array([MRP_PO_Likelihood(scale=scale,logm = logm,logHs=hs+dx,alpha=alpha,beta=beta).lnL-base.lnL,
-                     MRP_PO_Likelihood(scale=scale,logm = logm,logHs=hs,alpha=alpha+dx,beta=beta).lnL-base.lnL,
-                     MRP_PO_Likelihood(scale=scale,logm = logm,logHs=hs,alpha=alpha,beta=beta+dx).lnL-base.lnL])/dx
+## HELPER FUNCTIONS
+def numerical_jh(cl, q, dx=1e-4, hess=False, **kwargs):
+    def func(**kwargs):
+        return getattr(cl(**kwargs), q)
 
-def numerical_hess_po(logm,hs,alpha,beta,scale=0,dx=0.0001):
-    jac0 = numerical_jac_po(logm,hs,alpha,beta,scale,delta)
-    return np.array([numerical_jac_po(logm,hs+dx,alpha,beta,scale,dx)-jac0,
-                     numerical_jac_po(logm,hs,alpha+dx,beta,scale,dx)-jac0,
-                     numerical_jac_po(logm,hs,alpha,beta+dx,scale,dx)-jac0])/dx
+    if hess:
+        return numerical_hess(func, ["logHs", "alpha", 'beta'], dx, **kwargs)
+    else:
+        return numerical_jac(func, ["logHs", "alpha", 'beta'], dx, **kwargs)
+
+def numerical_jh4(cl, q, dx=1e-4, hess=False, **kwargs):
+    # This is necessary for CurveLike when all 4 params are free
+    def func(**kwargs):
+        return getattr(cl(**kwargs), q)
+
+    if hess:
+        return numerical_hess(func, ["logHs", "alpha", 'beta',"norm"], dx, **kwargs)
+    else:
+        return numerical_jac(func, ["logHs", "alpha", 'beta','norm'], dx, **kwargs)
+
+## Set some default parameters to use throughout
+alpha = -1.8
+beta = 0.7
+logHs = 14.0
+mmin = 11.0
+A = 1.0
+
+# A series of trial parameters
+trials = [(logHs, alpha, beta),
+          (logHs*1.1, alpha, beta),
+          (logHs, alpha*1.05, beta),
+          (logHs, alpha, beta*1.1)]
+
+
+#
+# ## Define numerical jac/hess
+# def numerical_jac_po(logm,hs,alpha,beta,scale=0,dx=0.0001):
+#     return numerical_jac()
+#     base = MRP_PO_Likelihood(scale=scale,logm = logm,logHs=hs,alpha=alpha,beta=beta)
+#     return np.array([MRP_PO_Likelihood(scale=scale,logm = logm,logHs=hs+dx,alpha=alpha,beta=beta).lnL-base.lnL,
+#                      MRP_PO_Likelihood(scale=scale,logm = logm,logHs=hs,alpha=alpha+dx,beta=beta).lnL-base.lnL,
+#                      MRP_PO_Likelihood(scale=scale,logm = logm,logHs=hs,alpha=alpha,beta=beta+dx).lnL-base.lnL])/dx
+#
+# def numerical_hess_po(logm,hs,alpha,beta,scale=0,dx=0.0001):
+#     jac0 = numerical_jac_po(logm,hs,alpha,beta,scale,delta)
+#     return np.array([numerical_jac_po(logm,hs+dx,alpha,beta,scale,dx)-jac0,
+#                      numerical_jac_po(logm,hs,alpha+dx,beta,scale,dx)-jac0,
+#                      numerical_jac_po(logm,hs,alpha,beta+dx,scale,dx)-jac0])/dx
+
+def get_jhq(cl,q,hess=False):
+    """
+    Gets the analytic jacobian or hessian from a given class, for a given quantity q.
+    """
+    sub = "hess" if hess else "jac"
+    if q != "lnL":
+        s = "%s_%s"%(q,sub)
+        if "__" in s:
+            s = s.replace("__","_")+"_"
+        return getattr(cl,s)
+    else:
+        return getattr(cl,"hessian" if hess else "jacobian")
 
 class TestPO(object):
-    def __init__(self):
-        # Parameters used to construct data
-        self.hs_def = 14.0
-        self.alpha_def = -1.9
-        self.beta_def = 0.8
-        self.lnA_def = 0
+    d = 1e-5
+    def run_q(self, q,hess, logHs, alpha, beta, scale):
+        # Data. For speed, just generate a couple of masses.
+        logm = np.array([14.0, 15.0])
 
-        # bad way to make data!
-        self.logm = np.linspace(10,16,200)
+        c = PerObjLike(scale=scale, logm=logm, logHs=logHs, alpha=alpha, beta=beta)
 
-        #Parameters used to get jac/hess
-        self.hs_sol = 14.2
-        self.alpha_sol = -1.85
-        self.beta_sol = 0.75
-        self.lnA_sol = 1
+        num = numerical_jh(PerObjLike, q, self.d, hess=hess,
+                           scale=scale, logm=logm, logHs=logHs, alpha=alpha, beta=beta)
+        anl = get_jhq(c,q,hess)
+        print anl/num
+        if hess:
+            assert np.all(np.isclose(anl, num, rtol=1e-2, atol=0))
+        else:
+            assert np.all(np.isclose(anl, num, rtol=1e-3, atol=0))
 
-        self.d = 1e-5
-        def run_jac(self,s):
-            c = MRP_PO_Likelihood(scale=s,logm = self.logm,logHs=self.hs_sol,
-                                  alpha=self.alpha_sol,beta=self.beta_sol)
+    def test_jh(self):
+        for q in ["lnL","_lng_","_lnq_"]:
+            for hess in [False, True]:
+                for s in [0,1]:
+                    for h, a, b in trials:
+                        yield self.run_q, q, hess, h, a, b, s
 
-            num = numerical_jac_po(self.logm,self.hs_sol,self.alpha_sol,self.beta_sol,s,self.d)
-            print c.jacobian/num - 1
-            assert np.all(np.isclose(mrp.jacobian,num,rtol=1e-3,atol=0))
+    def test_eq_mmin(self):
+        """
+        Simply tests if the extra underscore quantities are defined the right way.
+        """
+        c = PerObjLike(scale=1.0, logm=np.array([14.0]), logHs=logHs, alpha=alpha,
+                       beta=beta)
+        for q in ["lng",'lnq']:
+            for p in ['h','a','b',
+                      'h_h','h_a','h_b',
+                      'a_a','a_b','b_b']:
+                yield asseq, getattr(c,"_%s_%s"%(q,p)), getattr(c,"_%s_%s_"%(q,p))
 
-        def run_hess(self,s):
-            c = MRP_PO_Likelihood(scale=s,logm = self.logm,logHs=self.hs_sol,
-                                  alpha=self.alpha_sol,beta=self.beta_sol)
-
-            num = numerical_hess_po(self.logm,self.hs_sol,self.alpha_sol,self.beta_sol,s,self.d)
-            print c.hessian/num -1
-            assert np.all(np.isclose(mrp.hessian,num,rtol=1e-3,atol=0))
-
-        def test_jac(self):
-            for s in range(3):
-                yield self.run_jac, s
-
-        def test_hess(self):
-            for s in range(3):
-                yield self.run_hess, s
-
-
-def numerical_jac_curve(logm, dndm,logHs,alpha,beta,lnA,sig_rhomean=np.inf,sig_integ=np.inf,sig_data=1,scale=0,dx=0.0001):
-    y0 = MRP_Curve_Likelihood(logm = logm, dndm=dndm,sig_rhomean=sig_rhomean,sig_integ=sig_integ,sig_data=sig_data,
-                              alpha=alpha,beta=beta,logHs=logHs,lnA=lnA,scale=scale).lnL
-    return np.array([MRP_Curve_Likelihood(logm = logm, dndm=dndm,sig_rhomean=sig_rhomean,sig_integ=sig_integ,sig_data=sig_data,
-                              alpha=alpha,beta=beta,logHs=logHs+dx,lnA=lnA,scale=scale).lnL-y0,
-                  MRP_Curve_Likelihood(logm = logm,dndm=dndm,sig_rhomean=sig_rhomean,sig_integ=sig_integ,sig_data=sig_data,
-                              alpha=alpha+dx,beta=beta,logHs=logHs,lnA=lnA,scale=scale).lnL-y0,
-                  MRP_Curve_Likelihood(logm = logm, dndm=dndm,sig_rhomean=sig_rhomean,sig_integ=sig_integ,sig_data=sig_data,
-                              alpha=alpha,beta=beta+dx,logHs=logHs,lnA=lnA,scale=scale).lnL-y0,
-                 MRP_Curve_Likelihood(logm = logm, dndm=dndm,sig_rhomean=sig_rhomean,sig_integ=sig_integ,sig_data=sig_data,
-                              alpha=alpha,beta=beta,logHs=logHs,lnA=lnA+dx,scale=scale).lnL-y0])/dx
-
-def numerical_hess_curve(logm, dndm,logHs,alpha,beta,lnA,sig_rhomean=np.inf,sig_integ=np.inf,sig_data=1,scale=0,dx=0.0001):
-    y0 = numerical_jac_curve(logm, dndm,logHs,alpha,beta,lnA,sig_rhomean,sig_integ,sig_data,scale,dx)
-    return np.array([numerical_jac_curve(logm, dndm,logHs+dx,alpha,beta,lnA,sig_rhomean,sig_integ,sig_data,scale,dx)-y0,
-                  numerical_jac_curve(logm, dndm,logHs,alpha+dx,beta,lnA,sig_rhomean,sig_integ,sig_data,scale,dx)-y0,
-                  numerical_jac_curve(logm, dndm,logHs,alpha,beta+dx,lnA,sig_rhomean,sig_integ,sig_data,scale,dx)-y0,
-                  numerical_jac_curve(logm, dndm,logHs,alpha,beta,lnA+dx,sig_rhomean,sig_integ,sig_data,scale,dx)-y0])/dx
-
+def asseq(a,b):
+    assert a==b
 
 class TestCurve(object):
-    def __init__(self):
-        # Parameters used to construct data
-        self.hs_def = 14.1
-        self.alpha_def = -1.88
-        self.beta_def = 0.78
-        self.lnA_def = -42.5
+    d=1e-5
 
-        self.logm = np.linspace(10,16,200)
-        self.dndm = mrp(10**self.logm,self.hs_def,self.alpha_def,self.beta_def,norm=np.exp(self.lnA_def))
+    def run_jh(self, q,hess, logHs, alpha, beta, integ,rhomean,scale):
+        # Data
+        m = np.logspace(10,15,5)
+        dn = dndm(m,logHs=logHs*1.1, alpha=alpha*1.05, beta=beta*1.05,norm=A)
+        mwinteg = simps(m*dn,dx=np.log10(m[1]/m[0]))
 
-        #Parameters used to get jac/hess
-        self.hs_sol = 14.0
-        self.alpha_sol = -1.9
-        self.beta_sol = 0.8
-        self.lnA_sol = -43
+        c = CurveLike(np.linspace(10,15,5),logHs=logHs, alpha=alpha, beta=beta,
+                      dndm=dn, sig_integ=integ,sig_rhomean=rhomean,mw_integ=mwinteg)
 
-        self.d = 1e-5
+        num = numerical_jh(CurveLike, q, self.d, hess=hess,
+                           logm=np.linspace(10,15,5),logHs=logHs, alpha=alpha, beta=beta,
+                           dndm=dn,sig_integ=integ,sig_rhomean=rhomean,mw_integ=mwinteg)
+        anl = get_jhq(c,q,hess)
+        print anl/num
+        if hess:
+            assert np.all(np.isclose(anl, num, rtol=1e-2, atol=0))
+        else:
+            assert np.all(np.isclose(anl, num, rtol=1e-2, atol=0))
 
-    def run_jac(self,integ,rhomean,s):
-        c = MRP_Curve_Likelihood(logm = self.logm,dndm=self.dndm,
-                                 logHs=self.hs_sol,lnA=self.lnA_sol,
-                                 alpha=self.alpha_sol,beta=self.beta_sol,
-                                 sig_integ=integ,sig_rhomean=rhomean,scale=s)
 
-        num = numerical_jac_curve(self.logm, self.dndm,self.hs_sol,self.alpha_sol,
-                                  self.beta_sol,self.lnA_sol,rhomean,integ,
-                                  scale=s,dx=self.d)[:len(c.jacobian)]
+    def run_jh4(self, hess, logHs, alpha, beta, A, integ,rhomean,scale):
+        # Data
+        m = np.logspace(10,15,5)
+        dn = dndm(m,logHs=logHs*1.1, alpha=alpha*1.05, beta=beta*1.05,norm=A)
+        mwinteg = simps(m*dn,dx=np.log10(m[1]/m[0]))
 
-        #print "Analytic: ", c.jacobian
-        #print "Numerical: ", num
-        print c.jacobian/num -1
-        assert np.all(np.isclose(c.jacobian,num,rtol=5e-3,atol=0))
+        c = CurveLike(np.linspace(10,15,5),logHs=logHs, alpha=alpha, beta=beta,norm=A,
+                      dndm=dn,sig_integ=integ,sig_rhomean=rhomean,mw_integ=mwinteg)
 
-    def run_hess(self,integ,rhomean,s):
-        c = MRP_Curve_Likelihood(logm = self.logm,dndm=self.dndm,
-                                 logHs=self.hs_sol,lnA=self.lnA_sol,
-                                 alpha=self.alpha_sol,beta=self.beta_sol,
-                                 sig_integ=integ,sig_rhomean=rhomean,scale=s)
+        num = numerical_jh4(CurveLike, "lnL", self.d, hess=hess,
+                           logm=np.linspace(10,15,5),logHs=logHs, alpha=alpha, beta=beta,
+                           dndm=dn,sig_integ=integ,sig_rhomean=rhomean,norm=A,mw_integ=mwinteg)
+        anl = get_jhq(c,"lnL",hess)
+        print anl/num
+        if hess:
+            assert np.all(np.isclose(anl, num, rtol=1e-2, atol=0))
+        else:
+            assert np.all(np.isclose(anl, num, rtol=1e-2, atol=0))
 
-        num = numerical_hess_curve(self.logm, self.dndm,self.hs_sol,self.alpha_sol,
-                                   self.beta_sol,self.lnA_sol,rhomean,integ,
-                                   scale=s,dx=self.d)[:c.hessian.shape[0],:c.hessian.shape[1]]
 
-        print c.hessian/num -1
-        assert np.all(np.isclose(c.hessian,num,rtol=5e-2,atol=0))
+    def test_jh(self):
+        for q in ["lnL","_lnk"]:
+            for hess in [False]: #hessians don't work here yet.
+                for integ, rhomean in [(np.inf, 0), ( 0,np.inf)]:
+                    for s in (0,1):
+                        for h, a, b in trials:
+                            yield self.run_jh,  q, hess, h, a, b, integ,rhomean,s
 
-    def test_jac(self):
-        for integ,rhomean,s in [(np.inf,np.inf,0),(np.inf,0,0),(0,np.inf,0),
-                                (np.inf,np.inf,1),(np.inf,0,1),(0,np.inf,1),
-                                (1,1,1),(1,1,0)]:
-            yield self.run_jac, integ, rhomean,s
-
-    def test_hess(self):
-        for integ,rhomean,s in [(np.inf,np.inf,0),(np.inf,np.inf,1),
-                                (1,1,1),(1,1,0)]:
-            yield self.run_hess, integ, rhomean,s
+    def test_jh4(self):
+        for hess in [False, True]:
+            for integ, rhomean in [(np.inf,np.inf), (1,1)]:
+                for s in (0,1):
+                    for h, a, b in trials:
+                        yield self.run_jh4,  hess, h, a, b, A, integ,rhomean,s
