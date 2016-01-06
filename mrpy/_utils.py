@@ -1,3 +1,5 @@
+import numpy as np
+
 def copydoc(fromfunc, sep="\n"):
     """
     Decorator: Copy the docstring of `fromfunc`
@@ -30,3 +32,25 @@ def insertdoc(str, sep="\n"):
             func.__doc__ %= str
         return func
     return _decorator
+
+
+
+
+def numerical_jac(func, keys, dx=1e-4, **kwargs):
+    y0 = func(**kwargs)
+    out = np.zeros(len(keys))
+    for i, k in enumerate(keys):
+        kwargs[k] += dx
+        out[i] = func(**kwargs) - y0
+        kwargs[k] -= dx
+    return out/dx
+
+
+def numerical_hess(func, keys, dx=1e-5, **kwargs):
+    j0 = numerical_jac(func, keys, dx, **kwargs)
+    out = np.zeros((len(keys), len(keys)))
+    for i, k in enumerate(keys):
+        kwargs[k] += dx
+        out[i, :] = numerical_jac(func, keys, dx, **kwargs) - j0
+        kwargs[k] -= dx
+    return out/dx
