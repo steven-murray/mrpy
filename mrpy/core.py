@@ -125,7 +125,10 @@ def _getnorm(norm, logHs, alpha, beta, mmin, log=False, **Arhoc_kw):
         else:
             return 1./x
     elif np.all(np.isreal(norm)):
-        return norm
+        if log:
+            return np.log(norm)
+        else:
+            return norm
     elif norm == "rhoc":
         x =  A_rhoc(logHs, alpha, beta, **Arhoc_kw)
         if log:
@@ -288,8 +291,8 @@ class MRP(object):
         The shape parameters of the MRP.
 
     norm : float or string
-        Gives the normalisation of the MRP, *A*. If set to a *float*, it
-        is directly the normalisation. If set to ``"pdf"``, it will automatically
+        Gives the normalisation of the MRP, *lnA*. If set to a *float*, it
+        is directly the (log) normalisation. If set to ``"pdf"``, it will automatically
         render the MRP as a statistical distribution. If set to ``"rhoc"``, it will
         yield the correct total mass density across all masses, down to ``m=0``.
 
@@ -356,7 +359,12 @@ class MRP(object):
         """
         Natural log of the normalisation
         """
-        return _getnorm(self._norm, self.logHs, self.alpha, self.beta,
+        if np.lib._iotools._is_string_like(self._norm):
+            norm = self._norm
+        else:
+            norm = np.exp(self._norm)
+
+        return _getnorm(norm, self.logHs, self.alpha, self.beta,
                         self.mmin, log=True, **self._Arhoc_kw)
 
     @property
@@ -408,7 +416,7 @@ class MRP(object):
     # =============================================================================
     # Derived Scalar Quantities
     # =============================================================================
-    @cached
+    @property
     def log_mass_mode(self):
         """
         The mode of the log-space MRP weighted by mass
@@ -424,14 +432,14 @@ class MRP(object):
         return entire_integral(self.logHs, self.alpha, self.beta)
 
 
-    @cached
+    @property
     def nbar(self):
         """
         Total number density above truncation mass.
         """
         return self.ngtm()[0]
 
-    @cached
+    @property
     def rhobar(self):
         """
         Total mass density above truncation mass.
