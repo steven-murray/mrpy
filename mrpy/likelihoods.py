@@ -855,6 +855,10 @@ class CurveLike(PerObjLike):
         """
         The Jacobian of the likelihood with respect to the MRP parameters.
 
+        Order of the parameters is `logHs`, `alpha`, `beta`, `[lnA]`.
+
+        See Murray, Power, Robotham Appendix for details.
+
         .. note:: If the problem is constrained, this will be a length-3 vector, otherwise,
                   a length-4 vector including the normalisation.
         """
@@ -982,6 +986,10 @@ class CurveLike(PerObjLike):
     def hessian(self):
         """
         The hessian of the likelihood with respect to the MRP parameters.
+
+        Order of the parameters is `logHs`, `alpha`, `beta`, `[lnA]`.
+
+        See Murray, Power, Robotham Appendix for details.
 
         .. note:: If the problem is constrained, this will be a 3x3 matrix, otherwise,
                   a 4x4 matrix including the normalisation.
