@@ -1,36 +1,27 @@
 """
-A module defining a completely analytic model.
+A module defining the likelihoods and related quantities involved when
+the data is purely ideal and analytic.
+
+See appendix of Murray, Power and Robotham for more details.
+
+It is intended to provide a fast way to estimate the strength of fits using
+different parameters (such as the scaling).
 """
 import numpy as np
-from likelihoods import MRP_PO_Likelihood
-from special import gammainc, gamma, polygamma
+from likelihoods import PerObjLike
+from special import gammainc, gamma, polygamma, hyperReg_2F2,G1,G2
 import core
 from cached_property import cached_property as cached
-from mpmath import hyper
-from copy import copy
 
-# ===========================================================================
-# Helper Functions
-# ===========================================================================
 ln10 = np.log(10)
 
-gammaA = np.frompyfunc(lambda z: float(gamma(z)), 1, 1)
-hyperA = np.frompyfunc(lambda a, b, z: float(hyper(a, b, z)), 3, 1)
 
-def hyperRegA(a, b, z):
-    return hyperA(a, b, z) / np.product([gammaA(bb) for bb in b])
+class IdealAnalytic(PerObjLike):
 
-def hyperReg(a, b, z):
-    return float(hyper(a, b, z) / np.product([gamma(bb) for bb in b]))
-
-
-
-class IdealAnalytic(MRP_PO_Likelihood):
-
-    def __init__(self, lnA = -44, V=200.0 ** 3,
+    def __init__(self, V=200.0 ** 3,
                  logHsd=None, alphad=None, betad=None,**kwargs):
         """
-        Subclass of :class:`MRP_PO_Likelihood`, defining the expected likelihood and covariance for a sample
+        Subclass of :class:`PerObjLike`, defining the expected likelihood and covariance for a sample
         of variates drawn directly from an MRP distribution.
 
         See Murray, Robotham, Power (2016) for details.
@@ -41,9 +32,6 @@ class IdealAnalytic(MRP_PO_Likelihood):
 
         Parameters
         ----------
-        lnA : float, optional
-            Normalisation of the MRP
-
         V : float, optional
             The volume of the sample, in inverse units to the normalisation, A.
 
@@ -53,7 +41,8 @@ class IdealAnalytic(MRP_PO_Likelihood):
 
         Other Parameters
         ----------------
-        Other parameters are passed directly to :class:`MRP_PO_Likelihood`
+        args :
+            Other parameters are passed directly to :class:`PerObjLike`
         """
         if "log_mmin" not in kwargs:
             raise ValueError("log_mmin needs to be specified in this class")
@@ -62,7 +51,6 @@ class IdealAnalytic(MRP_PO_Likelihood):
 
         super(IdealAnalytic,self).__init__(logm=np.array([log_mmin]), **kwargs)
         self.V = V
-        self.lnA = lnA
 
         # Set data parameters
         self.logHsd = logHsd or self.logHs
@@ -94,36 +82,6 @@ class IdealAnalytic(MRP_PO_Likelihood):
         return (self._alphad_s+1)/self.betad
 
     # ===========================================================================
-    # Define some specific special quantities
-    # ===========================================================================
-    def _hyperReg(self, a, b, z):
-        # Note the following ONLY works properly for the calls in this class
-        if hasattr(a[0], "__len__"):
-            x = copy(a)
-            y = copy(b)
-            out = np.zeros_like(a[0])
-            z = np.atleast_1d(z)
-            if len(z) == 1:
-                z = np.repeat(z, len(a[0]))
-
-            for i, aa, bb, zz in enumerate(zip(a[0], b[0], z)):
-                x[0] = aa
-                x[1] = aa
-                y[0] = bb
-                y[1] = bb
-                out[i] = float(hyperReg(x, y, zz))
-            return out
-        elif hasattr(z, "__len__"):
-            a_s = np.ndarray((1,), dtype=object)
-            a_s[0] = a
-            b_s = np.ndarray((1,), dtype=object)
-            b_s[0] = b
-            return hyperRegA(a_s, b_s, z).astype("float")
-
-        else:
-            return hyperReg(a, b, z)
-
-    # ===========================================================================
     # Cached special functions (data counterparts)
     # ===========================================================================
     @cached
@@ -144,19 +102,19 @@ class IdealAnalytic(MRP_PO_Likelihood):
 
     @cached
     def _G1d(self):
-        return self._meijerg([[], [1, 1]], [[0, 0, self._zd], []], self._xd)/self._gammainc_zxd
+        return G1(self._zd,self._xd)
 
     @cached
     def _G1d_p1(self):
-        return self._meijerg([[], [1, 1]], [[0, 0, self._zd+self.beta/self.betad], []], self._xd)/self._gammainc_z1xd
+        return G1(self._zd+self.beta/self.betad, self._xd)
 
     @cached
     def _G2d(self):
-        return self._meijerg([[], [1, 1, 1]], [[0, 0, 0, self._zd], []], self._xd)/self._gammainc_zxd
+        return G2(self._zd, self._xd)
 
     @cached
     def _G2d_p1(self):
-        return self._meijerg([[], [1, 1, 1]], [[0, 0, 0, self._zd+self.beta/self.betad], []], self._xd)/self._gammainc_z1xd
+        return G2(self._zd+self.beta/self.betad,self._xd)
 
     @cached
     def _Gbard(self):
@@ -211,7 +169,7 @@ class IdealAnalytic(MRP_PO_Likelihood):
         zd = self._zd
         pg = polygamma(0, zd)
         return (a * self.Hsd / self.betad) * self._gammazd * (self._yd ** (ad + 1) * self._gammazd *
-                                      self._hyperReg([zd, zd], [zd + 1, zd + 1], -self._xd) +
+                                      hyperReg_2F2(zd, self._xd) +
                                       pg - self.betad * np.log(self._yd))
 
     @cached
@@ -369,8 +327,12 @@ class IdealAnalytic(MRP_PO_Likelihood):
                               [ha, aa, ab],
                               [hb, ab, bb]])
         return np.squeeze(x)
+
     @cached
     def cov(self):
+        """
+        The covariance matrix of the current "solution".
+        """
         if self._shape:
             return np.array([np.linalg.inv(-h) for h in self.hessian])
         else:
@@ -378,6 +340,9 @@ class IdealAnalytic(MRP_PO_Likelihood):
 
     @cached
     def corr(self):
+        """
+        The correlation matrix of the current "solution".
+        """
         if self._shape:
             s = [np.sqrt(np.diag(c)) for c in self.cov]
             return np.array([self.cov[i] / np.outer(ss, ss) for i, ss in enumerate(s)])
