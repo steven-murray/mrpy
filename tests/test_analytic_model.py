@@ -11,7 +11,8 @@ LOCATION = "/".join(os.path.dirname(os.path.abspath(inspect.getfile(inspect.curr
 sys.path.insert(0, LOCATION)
 
 from mrpy.analytic_model import IdealAnalytic
-from mrpy.likelihoods import MRP_PO_Likelihood
+from mrpy.likelihoods import PerObjLike
+from mrpy._utils import numerical_hess, numerical_jac
 import numpy as np
 from scipy.integrate import simps
 
@@ -36,8 +37,8 @@ def numerical_F(alpha, beta, logHs, scale=0, alphad=None, betad=None, logHsd=Non
     logHsd = logHsd or logHs
 
     m = np.logspace(mmin, 18, 1000)
-    mrp = MRP_PO_Likelihood(scale=scale, logm=np.log10(m), logHs=logHs, alpha=alpha, beta=beta)
-    mrpd = MRP_PO_Likelihood(scale=scale, logm=np.log10(m), logHs=logHsd, alpha=alphad, beta=betad)
+    mrp = PerObjLike(scale=scale, logm=np.log10(m), logHs=logHs, alpha=alpha, beta=beta)
+    mrpd = PerObjLike(scale=scale, logm=np.log10(m), logHs=logHsd, alpha=alphad, beta=betad)
     integ = mrpd._g*(mrp._lng - np.log(mrp._q_))
     return simps(integ, m)
 
@@ -54,29 +55,6 @@ def test_F_abs():
     """
     for h, a, b, hd, ad, bd, s in trials:
         yield F_abs_ratio, h, a, b, hd, ad, bd, s
-
-
-# ======================================================================================
-# From here on test Jac/Hess
-# ======================================================================================
-def numerical_jac(func, keys, dx=1e-4, **kwargs):
-    y0 = func(**kwargs)
-    out = np.zeros(len(keys))
-    for i, k in enumerate(keys):
-        kwargs[k] += dx
-        out[i] = func(**kwargs) - y0
-        kwargs[k] -= dx
-    return out/dx
-
-
-def numerical_hess(func, keys, dx=1e-5, **kwargs):
-    j0 = numerical_jac(func, keys, dx, **kwargs)
-    out = np.zeros((len(keys), len(keys)))
-    for i, k in enumerate(keys):
-        kwargs[k] += dx
-        out[i, :] = numerical_jac(func, keys, dx, **kwargs) - j0
-        kwargs[k] -= dx
-    return out/dx
 
 
 # --------- HELPER FUNCTIONS ----------------------------------------------------------
@@ -231,5 +209,5 @@ def test_nablaF():
             # The following fails at the moment, so continue
             if not hess and h==hd and a==ad and b==bd:
                 continue
-                
+
             yield runF, hess, h, a, b, hd, ad, bd, s
