@@ -6,15 +6,26 @@ For fits to binned data, see :module:`mrpy.fit_curve`. For the
 definition of the likelihood involved in the fits within this module see
 :class:`mrpy.likelihoods.PerObjLike`.
 """
-
+import pickle
+from hashlib import md5
+from os.path import expanduser, join, exists
+import os
 import numpy as np
 from scipy.optimize import minimize
 from likelihoods import PerObjLike
 from scipy.stats import truncnorm
-import emcee
+try:
+    import emcee
+except ImportError:
+    print "Warning: emcee not installed, some routines won't work."
 
-def get_fit_perobj(m, hs0=14.5, alpha0=-1.9, beta0=0.8,
-                   Om0=0.3, rhoc=2.7755e11,s=0, bounds=True,
+try:
+    import pystan
+except:
+    print "Warning: pystan not installed, some routines won't work."
+
+def fit_perobj_opt(m, hs0=14.5, alpha0=-1.9, beta0=0.8,
+                   Om0=0.3, rhoc=2.7755e11, s=0, bounds=True,
                    hs_bounds=(10, 16), alpha_bounds=(-1.99, -1.3),
                    beta_bounds=(0.1, 2.0), jac=True, **minimize_kw):
     """
@@ -84,8 +95,8 @@ def get_fit_perobj(m, hs0=14.5, alpha0=-1.9, beta0=0.8,
 
     Then find the best-fit parameters for the resulting data:
 
-    >>> from mrpy.fit_perobj import get_fit_perobj
-    >>> res,obj = get_fit_perobj(r)
+    >>> from mrpy.fit_perobj import fit_perobj_opt
+    >>> res,obj = fit_perobj_opt(r)
     >>> print res.x
 
     We can also use the ``obj`` object to explore some of the qualities of the fit
@@ -223,8 +234,8 @@ def fit_perobj_emcee(m, nchains=50,warmup=1000,iterations=1000,
     # First, set guess, either by optimization or passed values
     guess = np.array([hs0,alpha0,beta0])
     if opt_init:
-        res = get_fit_perobj(m,hs0,alpha0,beta0,Om0,rhoc,s,bounds,hs_bounds,alpha_bounds,
-                               beta_bounds,**opt_kw)[0]
+        res = fit_perobj_opt(m, hs0, alpha0, beta0, Om0, rhoc, s, bounds, hs_bounds, alpha_bounds,
+                             beta_bounds, **opt_kw)[0]
         if res.success:
             guess = res.x
             if debug:
@@ -284,3 +295,271 @@ def fit_perobj_emcee(m, nchains=50,warmup=1000,iterations=1000,
     mcmc_res.run_mcmc(initial, iterations)
 
     return mcmc_res
+
+
+
+# =========================================================================================
+# STAN ROUTINES
+# =========================================================================================
+_functions_block = """
+functions {
+    /**
+    * gammainc() is the upper incomplete gamma function (not regularized)
+    * @param real a, shape parameter
+    * @param real x, position > 0
+    * @returns the non-regularized incomplete gamma
+    * NOTES: uses a recursion relation to calculate values for negative a.
+    */
+    real gammainc(real a, real x){
+      int n;
+      real ap1;
+      real ssum;
+
+      if(a>=0) return gamma_q(a,x) * tgamma(a);
+
+      ap1 <- a+1;
+
+      //Get floor(-a)
+      n<-0;
+      while(n<-a){
+        n <- n+1;
+      }
+
+      //Get summed part
+      {
+        vector[n] sums;
+        for(i in 0:n-1) sums[i+1] <- pow(x,i)/tgamma(ap1+i);
+        ssum <- sum(sums);
+      }
+      return tgamma(a)*(gamma_q(a+n,x)-pow(x,a)*exp(-x)*ssum);
+    }
+
+    /**
+    * truncated_logGGD_log gives the log PDF of a variate whose exponential has a
+    *    lower-truncated generalised gamma distribution.
+    * @param vector y, variate (should be log10(m/Hs) in the usual TGGD)
+    * @param real ymin, truncation in y-space.
+    * @param real alpha, power-law slope
+    * @param real beta, cut-off parameter
+    */
+    real truncated_logGGD_log(vector y, real ymin, real alpha, real beta){
+        vector[num_elements(y)] x;
+        real xmin;
+        real z;
+
+        z <- (alpha+1)/beta;
+        x <- exp(log10()*y*beta);
+        xmin <- exp(log10()*ymin*beta);
+        return sum(log(beta) + log(log10()) + log10()*y*(alpha+1) - x - log(gammainc(z,xmin)));
+    }
+}
+"""
+
+_with_errors_data = """
+data {
+    int<lower=0> N;                // number of halos
+    vector<lower=0>[N] log_m_meas; // measured halo masses
+    vector<lower=0>[N] sd_dex;     // uncertainty in halo masses (dex)
+
+    // CONTROLS FOR PARAMETER BOUNDS
+    real<lower=0> hs_min;             // Lower bound of logHs
+    real<lower=0,upper=20> hs_max;    // Upper bound of logHs
+    real<lower=-2,upper=0> alpha_min; // Lower bound of alpha
+    real<lower=-2,upper=0> alpha_max; // Upper bound of alpha
+    real<lower=0> beta_min;           // Lower bound of beta
+    real<lower=0> beta_max;           // Upper bound of beta
+    real<lower=0> mmin_min;           // Lower bound of log_mmin
+    real<lower=0> mmin_max;           // Upper bound of log_mmin
+    real<lower=0,upper=20>mtrue_max;  // Upper bound of true masses
+}
+"""
+
+_simple_data = """
+data {
+    int<lower=0> N;                // number of halos
+    vector<lower=0>[N] log_m;      // measured halo masses
+
+    // CONTROLS FOR PARAMETER BOUNDS
+    real<lower=0> hs_min;             // Lower bound of logHs
+    real<lower=0,upper=20> hs_max;    // Upper bound of logHs
+    real<lower=-2,upper=0> alpha_min; // Lower bound of alpha
+    real<lower=-2,upper=0> alpha_max; // Upper bound of alpha
+    real<lower=0> beta_min;           // Lower bound of beta
+    real<lower=0> beta_max;           // Upper bound of beta
+}
+transformed data {
+    real<lower=0> log_mmin;
+    log_mmin <- min(log_m);
+}
+"""
+
+_with_errors_params = """
+parameters {
+    real<lower=hs_min,upper=hs_max> logHs;               // Characteristic halo mass
+    real<lower=alpha_min,upper=alpha_max> alpha;         // Power-law slope
+    real<lower=beta_min,upper=beta_max> beta;            // Cut-off parameter
+    real<lower=mmin_min,upper=mmin_max> log_mmin;        // Truncation mass
+    vector<lower=log_mmin,upper=mtrue_max>[N] log_mtrue; // True mass estimates
+}
+"""
+
+_simple_params = """
+parameters {
+    real<lower=hs_min,upper=hs_max> logHs;               // Characteristic halo mass
+    real<lower=alpha_min,upper=alpha_max> alpha;         // Power-law slope
+    real<lower=beta_min,upper=beta_max> beta;            // Cut-off parameter
+}
+"""
+
+_with_errors_model = """
+model {
+    vector[N] y;
+    real ymin;
+    y <- log_mtrue-logHs;
+    ymin <- log_mmin-logHs;
+
+    y ~ truncated_logGGD(ymin, alpha, beta);
+    log_mtrue ~ normal(log_m_meas,sd_dex);
+}
+"""
+
+_simple_model = """
+model {
+    vector[N] y;
+    real ymin;
+    y <- log_m-logHs;
+    ymin <- log_mmin-logHs;
+
+    y ~ truncated_logGGD(ymin, alpha, beta);
+}
+"""
+
+def _create_model(per_object_errors=False):
+    if per_object_errors:
+        return _functions_block + _with_errors_data + _with_errors_params + _with_errors_model
+    else:
+        return _functions_block + _simple_data + _simple_params + _simple_model
+
+def _write_model(fname,per_object_errors=False):
+    s = _create_model(per_object_errors)
+    with open(fname,"w") as f:
+        f.write(s)
+
+def _compile_model(per_object_errors=False):
+    return _stan_cache(model_name="MRP",model_code = _create_model(per_object_errors))
+
+
+def _stan_cache(model_code, model_name=None):
+    code_hash = md5(model_code.encode('ascii')).hexdigest()
+
+    #Find the mrpy project dir
+    dir =  join(expanduser("~"), '.mrpy')
+    if not exists(dir):
+        os.makedirs(dir)
+
+    if model_name is None:
+        cache_fn = 'cached-model-{}.pkl'.format(code_hash)
+    else:
+        cache_fn = 'cached-{}-{}.pkl'.format(model_name, code_hash)
+
+    try:
+        sm = pickle.load(open(join(dir,cache_fn), 'rb'))
+    except:
+        sm = pystan.StanModel(model_code=model_code,model_name=model_name)
+        with open(join(dir,cache_fn), 'wb') as f:
+            pickle.dump(sm, f)
+    else:
+        print("Using cached StanModel")
+
+    return sm
+
+
+def fit_perobj_stan(m, sd_dex=None, warmup=None,iter=1000,
+                    hs_bounds=(12, 16), alpha_bounds=(-1.99, -1.3),
+                    beta_bounds=(0.3, 2.0),mmin_bounds=None,opt=False,
+                    mtrue_max=16.0,**kwargs):
+    """
+    Fit the MRP to individual halo masses using the Stan programming language.
+
+    This method has less options than its `emcee` counterpart :func:`fit_perobj_emcee`,
+    but importantly can handle arbitrary per-object errors on the masses. For example,
+    at this stage, the priors on each parameter are hard-coded to be uniform.
+
+    Parameters
+    ----------
+    m : array_like
+        The masses (or variates).
+
+    sd_dex : array_like
+        Either a scalar giving the same lognormal uncertainty for each variate, or
+        a vector of the same length as `m`, giving arbitrary errors for each mass.
+
+    iter : int
+        The number of iterations to run.
+
+    warmup : int
+        The number of (discarded) warmup iterations to run (default ``iter/2``).
+
+    hs_bounds, alpha_bounds, beta_bounds : 2-tuples
+        Sets the boundaries of the parameters.
+
+    mmin_bounds : 2-tuple
+        The bounds for the mmin parameter, if errors are given on the masses.
+
+    opt : bool
+        Whether to run downhill optimization instead of MCMC. This does not work
+        when errors are provided on the masses.
+
+    mtrue_max : float
+        The maximum value that an estimated mass can have. Only used if errors
+        are given for masses.
+
+    kwargs
+        Passed to :func:`StanModel.sampling`. Please look at the pystan docs.
+
+    Returns
+    -------
+    fit : :class:`pystan.StanFit4Model` object
+        An object containing the stored chains and other methods to analyse
+        the results.
+        
+    """
+    if sd_dex is None:
+        stan_data = {"N":len(m),
+                     "log_m":np.log10(m),
+                     "hs_min":hs_bounds[0],
+                     "hs_max":hs_bounds[1],
+                     "alpha_min":alpha_bounds[0],
+                     "alpha_max":alpha_bounds[1],
+                     "beta_min":beta_bounds[0],
+                     "beta_max":beta_bounds[1]}
+    else:
+        if np.isscalar(sd_dex):
+            sd_dex = np.repeat(sd_dex,len(m))
+
+        if mmin_bounds is None:
+            mmin_bounds = (np.log10(m.min())-1,np.log10(m.min())+1)
+
+        stan_data = {"N":len(m),
+                     "log_m_meas":np.log10(m),
+                     "sd_dex":sd_dex,
+                     "hs_min":hs_bounds[0],
+                     "hs_max":hs_bounds[1],
+                     "alpha_min":alpha_bounds[0],
+                     "alpha_max":alpha_bounds[1],
+                     "beta_min":beta_bounds[0],
+                     "beta_max":beta_bounds[1],
+                     "mmin_min":mmin_bounds[0],
+                     "mmin_max":mmin_bounds[1],
+                     "mtrue_max":mtrue_max}
+
+    model = _compile_model(False if sd_dex is None else True)
+
+    warmup = warmup or iter/2
+    if opt:
+        fit = model.optimizing(data=stan_data)
+    else:
+        fit = model.sampling(stan_data,iter=iter,warmup=warmup,**kwargs)
+
+    return fit
+
