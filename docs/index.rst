@@ -20,7 +20,8 @@ API Summary
    mrpy.physical_dependence
    mrpy.likelihoods
    mrpy.analytic_model
-   mrpy.simple_fits
+   mrpy.fit_curve
+   mrpy.fit_perobj
 
 
 Indices and tables
