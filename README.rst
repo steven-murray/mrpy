@@ -19,11 +19,16 @@ Required packages are `numpy`, `scipy`, `mpmath` (for incomplete gamma functions
 and `cached_property`.
 These should be automatically installed when installing `mrpy`.
 
-To install, simply use ``pip install git+git://github.com/steven-murray/mrpy.git``.
-This should install all dependencies and the `mrpy` package.
+To use the MCMC fitting features, `emcee` and `pystan` are needed. These are *not*
+installed automatically.
 
-If this is not an option, manually download the github repo and use ``python setup.py install``.
-In this case, you may need to manually install the dependencies first.
+The simplest way to install is ``pip install mrpy``. This should install the required
+ dependencies automatically.
+
+To get the bleeding edge, use ``pip install git+git://github.com/steven-murray/mrpy.git``.
+
+If for some reason ``pip`` is not an option, manually download the github
+repo and use ``python setup.py install``.
 
 Core Functionality
 ++++++++++++++++++
