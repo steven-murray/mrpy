@@ -22,27 +22,34 @@ These should be automatically installed when installing `mrpy`.
 To install, simply use ``pip install git+git://github.com/steven-murray/mrpy.git``.
 This should install all dependencies and the `mrpy` package.
 
-If this is not an option, manually download this repo and use ``python setup.py install``.
+If this is not an option, manually download the github repo and use ``python setup.py install``.
 In this case, you may need to manually install the dependencies first.
 
 Core Functionality
 ++++++++++++++++++
-
 Core functionality (i.e. calculation of the MRP function given input parameters,
 plus some other functions useful for normalising) is in the ``core`` module. As
 an example::
 
-    >>> from mrpy import mrp
+    >>> from mrpy import dndm
     >>> import numpy as np
     >>> m = np.logspace(10,15,500)
-    >>> dndm = mrp(m,<hs>,<alpha>,<beta>,...)
+    >>> dn = dndm(m,<hs>,<alpha>,<beta>,...)
 
-Please look at the docstring of ``mrp`` for more details of options (eg. it can
+Please look at the docstring of ``dndm`` for more details of options (eg. it can
 be normalised in a few different ways or returned as the log).
+
+Pure Stats
+++++++++++
+If you don't care so much about the fact that the MRP is good for halo mass functions
+(or don't know what a halo mass function is...), but want to use the statistical
+distribution, you'll want the ``stats`` module. It contains an object called ``TGGD``
+(short for Truncated Generalised Gamma Distribution), which has many statistical
+quantities and methods available (such as producing random variates, mean, mode etc.)
 
 Physical dependence
 +++++++++++++++++++
-The ``physical_dependence`` module contains a counterpart to the basic ``mrp``
+The ``physical_dependence`` module contains a counterpart to the basic ``dndm``
 function, called ``mrp_b13``, which returns the best-fit MRP according to input
 physical variables (redshift, matter density, rms mass variance). These are
 derived from fits to the theoretical mass function of Behroozi+2013. Example::
@@ -56,12 +63,12 @@ derived from fits to the theoretical mass function of Behroozi+2013. Example::
 Note that the default redshift and cosmology is z=0, sigma_8=0.829 and Om0 = 0.315,
 in accordance with Planck+13 results.
 
-Simple Fits
+Fitting MRP
 +++++++++++
-The ``simple_fits`` module contains routines to fit the MRP to binned/curve data.
-This can be a theoretical curve, or binned halos. There are several options
-available, and the gradient of the objective function is specified analytically
-to improve performance. See Murray et al. (in prep.) for more details.
+The ``fit_curve`` module contains routines to fit the MRP to binned/curve data.
+This can be a theoretical curve, or binned halos (or other variates). There are
+several options available, and the gradient of the objective function is specified analytically
+to improve performance. See Murray, Robotham, Power, 2016 (in prep.) for more details.
 
 An example::
 
@@ -69,22 +76,34 @@ An example::
     >>> import numpy as np
     >>> import matplotlib.pyplot as plt
     >>> lm = np.logspace(10,15,500)
-    >>> dndm = mrpy.mrp(m,hs=14.0,alpha=-1.9,beta=0.75,norm=1)
-    >>> result, fitted_curve = mrpy.get_fit_curve(logm,dndm,hs0=14.1,alpha0=-1.8,beta0=0.81,lnA0=1)
+    >>> dndm = mrpy.dndm(m,hs=14.0,alpha=-1.9,beta=0.75,norm=1)
+    >>> result, curve_obj = mrpy.get_fit_curve(logm,dndm,hs0=14.1,alpha0=-1.8,beta0=0.81,lnA0=1)
     >>> print result
-    >>> plt.plot(m,fitted_curve/dndm-1)
+    >>> plt.plot(curve_obj.logm,curve_obj.dndm()/dndm-1)
     >>> plt.xscale('log')
 
-This simply fits the four MRP parameters to the input curve (which itself is a
-perfect MRP curve with known parameters). Options can be specified to constrain
-the normalisation either via the integral of the data, or the known mean density
+This simply fits the four MRP parameters to the input curve. Options can be
+specified to constrain the normalisation either via the integral of the data, or the known mean density
 of the Universe (or some combination thereof).
 
-Coming Soon
------------
-Upcoming features include:
+To fit actual samples of halos, use the ``fit_perobj`` module. There are three ways
+to do the fitting in this module. The first is to use simple downhill-gradient methods.
+Find an example of that below. The other methods both use MCMC. One uses the ``emcee``
+package, and is overall more flexible but does not support arbitrary per-object uncertainties.
+The other uses the ``pystan`` package, and is less flexible, but can take arbitrary uncertainties.
 
-* Ability to fit robustly to samples of halos using downhill gradient methods.
-* Ability to use MCMC methods to fit to samples of halos
-* STAN modules for MCMC fits to halo samples with arbitrary mass uncertainty
-* A useful re-parameterisation of the MRP
+An example of using the downhill method::
+
+    >>> from mrpy.stats import TGGD
+    >>> r = TGGD(scale=1e14,a=-1.8,b=1.0,xmin=1e12).rvs(1e5)
+    >>> from mrpy.fit_perobj import fit_perobj_opt
+    >>> res,obj = fit_perobj_opt(r)
+    >>> print res.x
+    >>> print obj.hessian
+    >>> print obj.cov
+    >>> from matplotlib.pyplot import plot
+    >>> plot(obj.logm,obj.dndm(log=True))
+    >>> print obj.stats.mean, r.mean()
+
+
+These have been a list of possibly the more commonly required methods. There's more inside!
