@@ -184,14 +184,14 @@ class PerObjLike(core.MRP):
         """
         The shape of the MRP, completely unnormalised (ie. A=1) (all masses)
         """
-        return core.dndm(self.m, self.logHs, self._alpha_s, self.beta, norm=1)
+        return core.dndm(self.m, self.logHs, self._alpha_s, self.beta, self.mmin, norm=1)
 
     @cached
     def _g_(self):
         """
         The shape of the MRP, completely unnormalised (ie. A=1) (truncation mass)
         """
-        return core.dndm(self.mmin, self.logHs, self._alpha_s, self.beta, norm=1)
+        return core.dndm(self.mmin, self.logHs, self._alpha_s, self.beta, self.mmin,norm=1)
 
     @cached
     def _lng(self):
@@ -205,7 +205,7 @@ class PerObjLike(core.MRP):
         """
         Better log of g than log(g) (truncation mass)
         """
-        return core.dndm(self.mmin, self.logHs, self._alpha_s, self.beta, norm=1, log=True)
+        return core.dndm(self.mmin, self.logHs, self._alpha_s, self.beta, self.mmin,norm=1, log=True)
 
     @cached
     def _q(self):
