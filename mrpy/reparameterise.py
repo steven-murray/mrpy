@@ -1,7 +1,20 @@
 """
-Provides tools to re-parameterise the MRP and get the appropriate lnL, jacobian
-and hessian at a point.
+Provides classes which implement variations of the MRP, in which the parameters have
+been transformed.
+
+Each transformation has three available classes:
+
+    * one with a suffix `MRP`, which implements the core MRP quantities (i.e. is a subclass of :class:`mrpy.core.MRP`)
+    * one with a suffix `PerObj`, which extends the previous one for likelihoods based on samples of variates (i.e. is a subclass of :class:`mrpy.likelihoods.PerObjLike`)
+    * one with a suffix `Curve`, which extends the base one for likelihoods based on chi-squared minimzation against binned data (i.e. a subclass of :class:`mrpy.likelihoods.CurveLike`)
+
+In all, the transformed parameters are denoted ``p1,p2,p3``.
+
+In addition, base classes for each are provided, which makes it easy to implement
+arbitrary transformations. See the docs for :class:`ReparameteriseMRP` for more
+details.
 """
+
 from cached_property import cached_property as cached
 from core import MRP
 from likelihoods import PerObjLike, CurveLike

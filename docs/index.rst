@@ -22,7 +22,7 @@ API Summary
    mrpy.analytic_model
    mrpy.fit_curve
    mrpy.fit_perobj
-
+   mrpy.reparameterise
 
 Indices and tables
 ------------------
