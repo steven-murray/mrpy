@@ -7,3 +7,4 @@ docs/_*
 examples/n2gc/*
 *-checkpoint.ipynb
 examples/n2gc_analysis/*
+examples/phys_dep/*
