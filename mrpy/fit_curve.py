@@ -14,7 +14,7 @@ from likelihoods import CurveLike
 
 def get_fit_curve(m, dndm, hs0=14.5, alpha0=-1.9, beta0=0.8, lnA0=-40,
               Om0=0.3, rhoc=2.7755e11, sigma_rhomean=np.inf, sigma_integ=np.inf,
-              s=1, bounds=True, hs_bounds=(0, 16), alpha_bounds=(-2, -1.3),
+              s=0, bounds=True, hs_bounds=(0, 16), alpha_bounds=(-2, -1.3),
               beta_bounds=(0.1, 5.0), lnA_bounds=(-50, 0), jac=True, **minimize_kw):
     """
     Basic LSQ fit for the MRP parameters, with flexible constraints.
