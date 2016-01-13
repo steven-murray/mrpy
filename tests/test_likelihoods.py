@@ -8,7 +8,7 @@ import sys
 sys.path.insert(0, LOCATION)
 
 from mrpy import dndm
-from mrpy.likelihoods import PerObjLike, CurveLike
+from mrpy.likelihoods import PerObjLike, CurveLike, PerObjLikeWeights
 from mrpy._utils import numerical_hess, numerical_jac
 import numpy as np
 from mrpy.stats import TGGD
@@ -173,3 +173,15 @@ class TestCurve(object):
                 for s in (0,1):
                     for h, a, b in trials:
                         yield self.run_jh4,  hess, h, a, b, A, integ,rhomean,s
+
+
+def test_weights():
+    m = np.array([14.0]*3 + [15.0]*2)
+    m_unique = np.array([14,15])
+    m_counts = np.array([3,2])
+
+    standard = PerObjLike(logm = m, logHs=14.0, alpha = -1.8, beta = 0.75)
+    weighted = PerObjLikeWeights(logm = m_unique, weights = m_counts,logHs=14.0, alpha = -1.8, beta = 0.75)
+
+    print standard.lnL, weighted.lnL
+    assert np.isclose(standard.lnL,weighted.lnL,rtol=1e-8)
