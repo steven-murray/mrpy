@@ -437,11 +437,13 @@ class MRP(object):
         """
         Total number density above truncation mass.
         """
-        return self.ngtm()[0]
+        return ngtm(self.mmin, self.logHs, self.alpha, self.beta, mmin=self.log_mmin,
+                    norm=self.A, log=False)
 
     @property
     def rhobar(self):
         """
         Total mass density above truncation mass.
         """
-        return self.rho_gtm()[0]
+        return rho_gtm(self.mmin, self.logHs, self.alpha, self.beta, mmin=self.log_mmin,
+                       norm=self.A, log=False)
