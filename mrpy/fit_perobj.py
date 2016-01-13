@@ -5,6 +5,8 @@ drawn from a TGGD).
 For fits to binned data, see :module:`mrpy.fit_curve`. For the
 definition of the likelihood involved in the fits within this module see
 :class:`mrpy.likelihoods.PerObjLike`.
+
+This module also provides pre-defined prior functions, specifically, the ``normal_prior``.
 """
 import pickle
 from hashlib import md5
@@ -91,7 +93,30 @@ def _objfunc(*args):
         return -out[0], -out[1]
 
 def normal_prior(p,mean,sd):
-     #Priors
+    """
+    A normal prior on each parameter.
+
+    Parameters
+    ----------
+    p : list
+        Values of the parameters
+
+    mean : list
+        Values of the prior mean
+
+    sd : list
+        Values of the prior standard deviations. Set to inf
+        if uniform prior required on a single parameter.
+
+    Returns
+    -------
+    ll :
+        The likelihood of the parameters given the priors
+
+    jac :
+        The jacobian of the likelihood.
+
+    """
     ll = 0
     jac = []
 
