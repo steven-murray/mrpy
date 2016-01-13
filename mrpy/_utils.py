@@ -54,3 +54,10 @@ def numerical_hess(func, keys, dx=1e-5, **kwargs):
         out[i, :] = numerical_jac(func, keys, dx, **kwargs) - j0
         kwargs[k] -= dx
     return out/dx
+
+def extra_squeeze(a):
+    b = np.squeeze(a)
+    if np.prod(b.shape)==1:
+        return b[0]
+    else:
+        return b
