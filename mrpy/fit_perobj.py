@@ -35,7 +35,7 @@ def _retarg(ll, jac, ret_jac):
 
 # Define the likelihood function
 def _lnl(p, m, nm, mmin, s, hs_bounds, alpha_bounds,
-         beta_bounds, prior_func=None, debug=0, ret_jac=False):
+         beta_bounds, prior_func=None, prior_kwargs={},debug=0, ret_jac=False):
     ## Note m,nm, mmin are always interpreted as being a list of arrays/scalars
 
     # Some absolute bounds
@@ -62,7 +62,7 @@ def _lnl(p, m, nm, mmin, s, hs_bounds, alpha_bounds,
     if prior_func is None:  # default uniform prior.
         ll, jac = 0, np.zeros(3)
     else:
-        ll, jac = prior_func(p)
+        ll, jac = prior_func(p,**prior_kwargs)
 
     # Likelihood
     for mi, nmi, mmini in zip(m, nm, mmin):
@@ -90,6 +90,16 @@ def _objfunc(*args):
     else:
         return -out[0], -out[1]
 
+def normal_prior(p,mean,sd):
+     #Priors
+    ll = 0
+    jac = []
+
+    for v,mu,s in zip(p,mean,sd):
+        ll += -((v-mu)/(2*s))**2
+        jac.append(-(v-mu)/s)
+
+    return ll, jac
 
 class PerObjFit(object):
     """
@@ -122,11 +132,15 @@ class PerObjFit(object):
     prior_func : function, optional
         A function to calculate the likelihood arising from priors on the parameters.
         By default, uniform priors are assumed, which add nothing to the likelihood.
-        The only parameter taken by the function should be the vector of parameter
-        values, ``[logHs,alpha,beta]``. It should return a tuple, with the first value
+        The first parameter taken by the function should be the vector of parameter
+        values, ``[logHs,alpha,beta]``, after which arbitrary values are passed via
+        `prior_kwargs`. It should return a tuple, with the first value
         being a float and constituting the likelihood arising from the prior, and the second
         being a 3-vector constituting the modification to the jacobian. This can be zero
         if no jacobian is desired.
+
+    prior_kwargs : dict
+        Arguments sent to the `prior_func`.
 
     Notes
     -----
@@ -142,18 +156,20 @@ class PerObjFit(object):
 
     def __init__(self, m, nm=None, mmin=None, weight_scale=0,
                  hs_bounds=(10, 16), alpha_bounds=(-1.99, -1.3),
-                 beta_bounds=(0.1, 2.0), prior_func=None):
+                 beta_bounds=(0.1, 2.0), prior_func=None,prior_kwargs={}):
 
         self._determine_suite(m, nm, mmin)
 
         # Make sure all masses are above mmin
         for i, (m, mmin) in enumerate(zip(self.m, self.mmin)):
             self.m[i] = m[m >= mmin]
+            self.nm[i] = self.nm[i][m >= mmin]
 
         self.hs_bounds = hs_bounds
         self.alpha_bounds = alpha_bounds
         self.beta_bounds = beta_bounds
         self.prior_func = prior_func
+        self.prior_kwargs = prior_kwargs
         self.weight_scale = weight_scale
 
     def _determine_suite(self, m, nm, mmin):
@@ -246,7 +262,7 @@ class PerObjFit(object):
         p0 = [hs0, alpha0, beta0]
         bounds = [self.hs_bounds, self.alpha_bounds, self.beta_bounds]
         self.downhill_res = minimize(_objfunc, p0, args=(self.m, self.nm, self.mmin, self.weight_scale, (0, np.inf),
-                                                         (-np.inf, np.inf), (0, np.inf), self.prior_func,
+                                                         (-np.inf, np.inf), (0, np.inf), self.prior_func,self.prior_kwargs,
                                                          debug, jac),
                                      bounds=bounds, jac=jac, **minimize_kw)
 
@@ -355,7 +371,7 @@ class PerObjFit(object):
 
         self.mcmc_res = emcee.EnsembleSampler(nchains, initial.shape[1], _lnl,
                                               args=(self.m, self.nm, self.mmin, self.weight_scale, self.hs_bounds,
-                                                    self.alpha_bounds, self.beta_bounds, self.prior_func,
+                                                    self.alpha_bounds, self.beta_bounds, self.prior_func, self.prior_kwargs,
                                                     debug, False), **kwargs)
 
         if warmup:
