@@ -851,7 +851,7 @@ def _stan_cache(model_code, model_name=None):
 def fit_perobj_stan(m, sd_dex=None, warmup=None, iter=1000,
                     hs_bounds=(12, 16), alpha_bounds=(-1.99, -1.3),
                     beta_bounds=(0.3, 2.0), mmin_bounds=None, opt=False,
-                    mtrue_max=16.0, **kwargs):
+                    mtrue_max=16.0, model=None, **kwargs):
     """
     Fit the MRP to individual halo masses using the Stan programming language.
 
@@ -927,9 +927,11 @@ def fit_perobj_stan(m, sd_dex=None, warmup=None, iter=1000,
                      "mmin_max": mmin_bounds[1],
                      "mtrue_max": mtrue_max}
 
-    model = _compile_model(False if sd_dex is None else True)
+    if model is None:
+        model = _compile_model(False if sd_dex is None else True)
 
     warmup = warmup or iter/2
+
     if opt:
         fit = model.optimizing(data=stan_data)
     else:
