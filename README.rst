@@ -23,7 +23,7 @@ To use the MCMC fitting features, `emcee` and `pystan` are needed. These are *no
 installed automatically.
 
 The simplest way to install is ``pip install mrpy``. This should install the required
- dependencies automatically.
+dependencies automatically.
 
 To get the bleeding edge, use ``pip install git+git://github.com/steven-murray/mrpy.git``.
 
