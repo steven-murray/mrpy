@@ -49,7 +49,7 @@ class IdealAnalytic(PerObjLike):
         else:
             log_mmin = kwargs.pop("log_mmin")
 
-        super(IdealAnalytic,self).__init__(logm=np.array([log_mmin]), **kwargs)
+        super(IdealAnalytic,self).__init__(logm=np.array([log_mmin]), log_mmin=log_mmin, **kwargs)
         self.V = V
 
         # Set data parameters
@@ -313,15 +313,14 @@ class IdealAnalytic(PerObjLike):
         ab = self._F_x_y("a", "b")
         bb = self._F_x_y("b", "b")
         A = self.V * np.exp(self.lnA) * (self._qd_nos / self._qd)
-        if self._shape:
-            try:
-                x = A * np.array([np.array([[hh[i], ha[i], hb[i]],
-                                          [ha[i], aa[i], ab[i]],
-                                          [hb[i], ab[i], bb[i]]]) for i in range(len(hh))])
-            except:
-                x = np.array([A[i] * np.array([[hh[i], ha[i], hb[i]],
-                                             [ha[i], aa[i], ab[i]],
-                                             [hb[i], ab[i], bb[i]]]) for i in range(len(hh))])
+        if self._shape and not hasattr(A,"__len__"):
+            x = A * np.array([np.array([[hh[i], ha[i], hb[i]],
+                                      [ha[i], aa[i], ab[i]],
+                                      [hb[i], ab[i], bb[i]]]) for i in range(len(hh))]).T
+        elif self._shape and hasattr(A,"__len__"):
+            x = np.array([A[i] * np.array([[hh[i], ha[i], hb[i]],
+                                         [ha[i], aa[i], ab[i]],
+                                         [hb[i], ab[i], bb[i]]]) for i in range(len(hh))]).T
         else:
             x = A * np.array([[hh, ha, hb],
                               [ha, aa, ab],
