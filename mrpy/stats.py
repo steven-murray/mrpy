@@ -15,10 +15,10 @@ The distribution functions implemented here are described in detail in Murray, R
 """
 
 import numpy as np
-from special import gammainc
-from scipy.interpolate import InterpolatedUnivariateSpline as spline
-from scipy.misc import comb
-from _utils import copydoc
+import special as sp
+from scipy.interpolate import InterpolatedUnivariateSpline as _spline
+from scipy.misc import comb as _comb
+import _utils
 
 ln10 = np.log(10)
 
@@ -134,7 +134,7 @@ class TGGD(object):
             return np.log(self.b) + self.a*np.log(xt) - xt**self.b
 
     def _pdf_norm(self, log=False):
-        a = self.scale*gammainc(self._z, self._xmintb)
+        a = self.scale*sp.gammainc(self._z, self._xmintb)
         if not log:
             return a
         else:
@@ -152,9 +152,9 @@ class TGGD(object):
         return p
 
     def _q_convert(self, p, lin_cdf, log_cdf, logm, log_p):
-        lin_icdf = spline(lin_cdf, logm[:len(lin_cdf)])
+        lin_icdf = _spline(lin_cdf, logm[:len(lin_cdf)])
         # the log-space icdf must be done in double log space.
-        log_icdf = spline(np.log(-log_cdf)[::-1], logm[-len(log_cdf):][::-1])
+        log_icdf = _spline(np.log(-log_cdf)[::-1], logm[-len(log_cdf):][::-1])
         tp = lin_cdf[-1]
         if np.isscalar(p):
             p = np.array(p)
@@ -227,7 +227,7 @@ class TGGD(object):
             The integrated probability of a variate being smaller than *q*.
         """
         qt = self._xt(q)
-        p = gammainc(self._z, qt**self.b)/gammainc(self._z, self._xmintb)
+        p = sp.gammainc(self._z, qt**self.b)/sp.gammainc(self._z, self._xmintb)
         return self._cdf_convert(p, lower_tail, log_p)
 
     def quantile(self, p, lower_tail=True, log_p=False, res_approx=1e-2):
@@ -362,7 +362,7 @@ class TGGD(object):
         zn = (self.a + 1 + n)/self.b
         z0 = (self.a + 1)/self.b
         x = (self.xmin/self.scale)**self.b
-        return self.scale**n*gammainc(zn, x)/gammainc(z0, x)
+        return self.scale**n*sp.gammainc(zn, x)/sp.gammainc(z0, x)
 
     def central_moments(self, n):
         """
@@ -399,10 +399,10 @@ class TGGD(object):
 
         x = (self.xmin/self.scale)**self.b
 
-        coeffs = comb(n, k)
+        coeffs = _comb(n, k)
 
-        return self.scale**n*np.sum(coeffs*gammainc(z1, x)**(n - k)*
-                                    gammainc(zk, x)*sign/gammainc(z0, x)**(n - k + 1))
+        return self.scale**n*np.sum(coeffs*sp.gammainc(z1, x)**(n - k)*
+                                    sp.gammainc(zk, x)*sign/sp.gammainc(z0, x)**(n - k + 1))
 
     @property
     def variance(self):
@@ -574,7 +574,7 @@ class TGGDlog(TGGD):
             return np.log(ln10*self.b) + (self.a + 1)*np.log(xt) - xt**self.b
 
     def _pdf_norm(self, log=False):
-        a = gammainc(self._z, self._xmintb)
+        a = sp.gammainc(self._z, self._xmintb)
         if not log:
             return a
         else:
@@ -587,7 +587,7 @@ class TGGDlog(TGGD):
     # =====================================================================================
     # Public Methods/Attributes
     # =====================================================================================
-    @copydoc(TGGD.quantile)
+    @_utils.copydoc(TGGD.quantile)
     def quantile(self, p, lower_tail=True, log_p=False, res_approx=1e-2):
         xmax = self._q_xmax
         logx = np.arange(self.xmin, xmax, res_approx)

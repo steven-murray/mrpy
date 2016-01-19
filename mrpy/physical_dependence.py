@@ -17,8 +17,7 @@ were parameterised as a function of the physical parameters using the Eureqa sof
           trust these values far from the log-mass-mode of each fit.
 """
 import numpy as np
-from core import dndm
-
+import core
 
 def _logHs_b13(z=0, Om0=0.315, sig8=0.829, mu=12.214, sd=1.6385, a=0.058562, b=1.4394,
               c=0.39111, d=0.11159, e=0.056010, f=0.42444, g=0.90369, h=0.0029417):
@@ -74,4 +73,4 @@ def mrp_b13(m, z=0, Om0=0.315, sig8=0.829, Hs_kw={}, alpha_kw={}, beta_kw={}, lo
     if norm is None:
         norm = np.exp(logA)
 
-    return dndm(m, hs, alpha, beta, mmin, norm, log, **Arhoc_kw)
+    return core.dndm(m, hs, alpha, beta, mmin, norm, log, **Arhoc_kw)

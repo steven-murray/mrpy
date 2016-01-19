@@ -7,13 +7,12 @@ per-object (PO) or fitting to a binned (or theoretical) curve.
 
 At this time, we don't directly support fitting MRP extensions, such as a double-MRP.
 """
-
-from special import gamma, gammainc, polygamma, G1, G2
+import special as sp
 import core
 import numpy as np
-from scipy.integrate import simps
-from cached_property import cached_property as cached
-from mrpy.stats import TGGD
+import scipy.integrate as intg
+from cached_property import cached_property as _cached
+import stats
 
 ln10 = np.log(10)
 
@@ -72,35 +71,35 @@ class PerObjLike(core.MRP):
     # ===========================================================================
     # Basic unit quantities
     # ===========================================================================
-    @cached
+    @_cached
     def _z(self):
         """
         The term z = (1+alpha)/beta.
         """
         return (self._alpha_s + 1)/self.beta
 
-    @cached
+    @_cached
     def _y_(self):
         """
         The scaled truncation mass
         """
         return self.mmin/self.Hs
 
-    @cached
+    @_cached
     def _x_(self):
         """
         y^beta (truncation mass scaled)
         """
         return self._y_**self.beta
 
-    @cached
+    @_cached
     def _y(self):
         """
         The scaled masses
         """
         return self.m/self.Hs
 
-    @cached
+    @_cached
     def _x(self):
         """
         y^beta (all masses, not just truncation)
@@ -110,127 +109,125 @@ class PerObjLike(core.MRP):
     # ===========================================================================
     # Cached special functions
     # ===========================================================================
-    @cached
+    @_cached
     def _gammaz(self):
         """
         The gamma function at z=(1+a)/b. Stored for use elsewhere.
         """
-        return gamma(self._z)
+        return sp.gamma(self._z)
 
-    @cached
+    @_cached
     def _gammainc_zx(self):
         """
         The incomplete gamma function, Gamma(z,x), where z,x are as specified in
         this class.
         """
-        return gammainc(self._z, self._x)
+        return sp.gammainc(self._z, self._x)
 
-    @cached
+    @_cached
     def _gammainc_zx_(self):
         """
         The incomplete gamma function, Gamma(z,x), where z,x are as specified in
         this class.
         """
-        return gammainc(self._z, self._x_)
+        return sp.gammainc(self._z, self._x_)
 
-    @cached
+    @_cached
     def _G1(self):
-        return G1(self._z, self._x)
+        return sp.G1(self._z, self._x)
 
-    @cached
+    @_cached
     def _G1_(self):
-        return G1(self._z, self._x_)
+        return sp.G1(self._z, self._x_)
 
-    @cached
+    @_cached
     def _G2(self):
-        return G2(self._z, self._x)
+        return sp.G2(self._z, self._x)
 
-    @cached
+    @_cached
     def _G2_(self):
-        return G2(self._z, self._x_)
+        return sp.G2(self._z, self._x_)
 
-    @cached
+    @_cached
     def _Gbar(self):
         return self._G1*np.log(self._x) + 2*self._G2
 
-    @cached
+    @_cached
     def _Gbar_(self):
         return self._G1_*np.log(self._x_) + 2*self._G2_
 
-    @cached
+    @_cached
     def _phi(self):
         return self._y*self._g/self._gammainc_zx
 
-    @cached
+    @_cached
     def _phi_(self):
         return self._y_*self._g_/self._gammainc_zx_
 
     # ===========================================================================
     # Mass scaling utilities
     # ===========================================================================
-    @cached
+    @_cached
     def _scaled_mass(self):
         return self.m**self.scale
 
-    @cached
+    @_cached
     def _mean_scaling(self):
         return np.mean(self._scaled_mass)
 
     # ===========================================================================
     # Basic MRP quantities, renamed for compactness
     # ===========================================================================
-    @cached
+    @_cached
     def _g(self):
         """
         The shape of the MRP, completely unnormalised (ie. A=1) (all masses)
         """
         return core.dndm(self.m, self.logHs, self._alpha_s, self.beta, self.mmin, norm=1)
 
-    @cached
+    @_cached
     def _g_(self):
         """
         The shape of the MRP, completely unnormalised (ie. A=1) (truncation mass)
         """
         return core.dndm(self.mmin, self.logHs, self._alpha_s, self.beta, self.mmin,norm=1)
 
-    @cached
+    @_cached
     def _lng(self):
         """
         Better log of g than log(g) (all masses)
         """
         return core.dndm(self.m, self.logHs, self._alpha_s, self.beta, norm=1, log=True)
 
-    @cached
+    @_cached
     def _lng_(self):
         """
         Better log of g than log(g) (truncation mass)
         """
         return core.dndm(self.mmin, self.logHs, self._alpha_s, self.beta, self.mmin,norm=1, log=True)
 
-    @cached
+    @_cached
     def _q(self):
         """
         The normalisation of the MRP (ie. integral of g) (all masses)
         """
-        stats = TGGD(scale=self.Hs, a=self._alpha_s, b=self.beta, xmin=self.m)
-        return stats._pdf_norm()
+        return stats.TGGD(scale=self.Hs, a=self._alpha_s, b=self.beta, xmin=self.m)._pdf_norm()
 
-    @cached
+    @_cached
     def _q_(self):
         """
         The normalisation of the MRP (ie. integral of g) (truncation masses)
         """
-        stats = TGGD(scale=self.Hs, a=self._alpha_s, b=self.beta, xmin=self.mmin)
-        return stats._pdf_norm()
+        return stats.TGGD(scale=self.Hs, a=self._alpha_s, b=self.beta, xmin=self.mmin)._pdf_norm()
 
-    @cached
+    @_cached
     def _lnq(self):
         """
         The log normalisation of the MRP (ie. integral of g) (all masses)
         """
         return np.log(self._q)
 
-    @cached
+    @_cached
     def _lnq_(self):
         """
         The normalisation of the MRP (ie. integral of g) (truncation masses)
@@ -240,7 +237,7 @@ class PerObjLike(core.MRP):
     # ===========================================================================
     # Basic likelihood
     # ===========================================================================
-    @cached
+    @_cached
     def _lnLi(self):
         """
         Logarithmic likelihood of the particles, given its mass and a model (uniform prior)
@@ -258,242 +255,242 @@ class PerObjLike(core.MRP):
     # Simple Derivatives
     # ===========================================================================
     # ----------- g'() --------------------------------------
-    @cached
+    @_cached
     def _lng_h(self):
         return (self.beta*self._x - self._alpha_s)*ln10
 
-    @cached
+    @_cached
     def _lng_h_(self):
         return (self.beta*self._x_ - self._alpha_s)*ln10
 
-    @cached
+    @_cached
     def _lng_a(self):
         return np.log(self._y)
 
-    @cached
+    @_cached
     def _lng_a_(self):
         return np.log(self._y_)
 
-    @cached
+    @_cached
     def _lng_b(self):
         return (1 - self._x*np.log(self._x))/self.beta
 
-    @cached
+    @_cached
     def _lng_b_(self):
         return (1 - self._x_*np.log(self._x_))/self.beta
 
-    @cached
+    @_cached
     def _lng_h_h_(self):
         return -ln10**2*self.beta**2*self._x_
 
-    @cached
+    @_cached
     def _lng_h_h(self):
         return -ln10**2*self.beta**2*self._x
 
-    @cached
+    @_cached
     def _lng_a_a_(self):
         return 0
 
-    @cached
+    @_cached
     def _lng_a_a(self):
         return np.zeros(len(self.m))
 
-    @cached
+    @_cached
     def _lng_a_b_(self):
         return 0
 
-    @cached
+    @_cached
     def _lng_a_b(self):
         return np.zeros(len(self.m))
 
-    @cached
+    @_cached
     def _lng_b_b_(self):
         return -1/self.beta**2 - self._x_*np.log(self._y_)**2
 
-    @cached
+    @_cached
     def _lng_b_b(self):
         return -1/self.beta**2 - self._x*np.log(self._y)**2
 
-    @cached
+    @_cached
     def _lng_h_a_(self):
         return -ln10
 
-    @cached
+    @_cached
     def _lng_h_a(self):
         return -np.ones(len(self.m))*ln10
 
-    @cached
+    @_cached
     def _lng_h_b_(self):
         return self._x_*(1 + np.log(self._x_))*ln10
 
-    @cached
+    @_cached
     def _lng_h_b(self):
         return self._x*(1 + np.log(self._x))*ln10
 
-    @cached
+    @_cached
     def _lng_jac(self):
         return np.array([getattr(self, "_lng_%s"%x) for x in 'hab'])
 
-    @cached
+    @_cached
     def _lng_hess(self):
         return np.array([getattr(self, "_lng_%s_%s"%(x, y)) for x, y in ('hh', 'ha', 'hb',
                                                                          'ha', 'aa', 'ab',
                                                                          'hb', 'ab', 'bb')]).reshape(
                 (3, 3, len(self.m)))
 
-    @cached
+    @_cached
     def _lng_jac_(self):
         return np.array([getattr(self, "_lng_%s_"%x) for x in 'hab'])
 
-    @cached
+    @_cached
     def _lng_hess_(self):
         return np.array([getattr(self, "_lng_%s_%s_"%(x, y)) for x, y in ('hh', 'ha', 'hb',
                                                                           'ha', 'aa', 'ab',
                                                                           'hb', 'ab', 'bb')]).reshape((3, 3))
 
     # --------- \tilde{q}'() --------------------------------------
-    @cached
+    @_cached
     def _lnq_h(self):
         return ln10*(1 + self._phi)
 
-    @cached
+    @_cached
     def _lnq_h_(self):
         return ln10*(1 + self._phi_)
 
-    @cached
+    @_cached
     def _lnq_a(self):
         return (np.log(self._x) + self._G1)/self.beta
 
-    @cached
+    @_cached
     def _lnq_a_(self):
         return (np.log(self._x_) + self._G1_)/self.beta
 
-    @cached
+    @_cached
     def _lnq_b(self):
         return -self._z*self._lnq_a - self._phi*np.log(self._y)/self.beta
 
-    @cached
+    @_cached
     def _lnq_b_(self):
         return -self._z*self._lnq_a_ - self._phi_*np.log(self._y_)/self.beta
 
-    @cached
+    @_cached
     def _q_h_h(self):
         return ln10*(self._lnq_h + self._phi*self._lng_h)
 
-    @cached
+    @_cached
     def _q_h_h_(self):
         return ln10*(self._lnq_h_ + self._phi_*self._lng_h_)
 
-    @cached
+    @_cached
     def _lnq_h_h(self):
         return self._q_h_h - self._lnq_h**2
 
-    @cached
+    @_cached
     def _lnq_h_h_(self):
         return self._q_h_h_ - self._lnq_h_**2
 
-    @cached
+    @_cached
     def _q_a_a(self):
         return (1.0/self.beta)*(self._lnq_a*np.log(self._x) + self._Gbar/self.beta)
 
-    @cached
+    @_cached
     def _q_a_a_(self):
         return (1.0/self.beta)*(self._lnq_a_*np.log(self._x_) + self._Gbar_/self.beta)
 
-    @cached
+    @_cached
     def _lnq_a_a(self):
         return self._q_a_a - self._lnq_a**2
 
-    @cached
+    @_cached
     def _lnq_a_a_(self):
         return self._q_a_a_ - self._lnq_a_**2
 
-    @cached
+    @_cached
     def _q_a_b(self):
         b = self.beta
         lnx = np.log(self._x)
         return (1.0/self.beta)*(-self._lnq_a + self._lnq_b*lnx - (self._z*self._Gbar/b))
 
-    @cached
+    @_cached
     def _q_a_b_(self):
         b = self.beta
         lnx = np.log(self._x_)
         return (1.0/self.beta)*(-self._lnq_a_ + self._lnq_b_*lnx - (self._z*self._Gbar_/b))
 
-    @cached
+    @_cached
     def _lnq_a_b(self):
         return self._q_a_b - self._lnq_a*self._lnq_b
 
-    @cached
+    @_cached
     def _lnq_a_b_(self):
         return self._q_a_b_ - self._lnq_a_*self._lnq_b_
 
-    @cached
+    @_cached
     def _q_b_b(self):
         b = self.beta
         return (self._phi*np.log(self._y)/b)*(1./b - self._lng_b) - self._z*(self._q_a_b - self._lnq_a/b)
 
-    @cached
+    @_cached
     def _q_b_b_(self):
         b = self.beta
         return (self._phi_*np.log(self._y_)/b)*(1./b - self._lng_b_) - self._z*(self._q_a_b_ - self._lnq_a_/b)
 
-    @cached
+    @_cached
     def _lnq_b_b(self):
         return self._q_b_b - self._lnq_b*self._lnq_b
 
-    @cached
+    @_cached
     def _lnq_b_b_(self):
         return self._q_b_b_ - self._lnq_b_*self._lnq_b_
 
-    @cached
+    @_cached
     def _q_h_a(self):
         return ln10*(self._lnq_a + self._phi*self._lng_a)
 
-    @cached
+    @_cached
     def _q_h_a_(self):
         return ln10*(self._lnq_a_ + self._phi_*self._lng_a_)
 
-    @cached
+    @_cached
     def _lnq_h_a(self):
         return self._q_h_a - self._lnq_a*self._lnq_h
 
-    @cached
+    @_cached
     def _lnq_h_a_(self):
         return self._q_h_a_ - self._lnq_a_*self._lnq_h_
 
-    @cached
+    @_cached
     def _q_h_b(self):
         return ln10*(self._lnq_b + self._phi*self._lng_b)
 
-    @cached
+    @_cached
     def _q_h_b_(self):
         return ln10*(self._lnq_b_ + self._phi_*self._lng_b_)
 
-    @cached
+    @_cached
     def _lnq_h_b(self):
         return self._q_h_b - self._lnq_h*self._lnq_b
 
-    @cached
+    @_cached
     def _lnq_h_b_(self):
         return self._q_h_b_ - self._lnq_h_*self._lnq_b_
 
-    @cached
+    @_cached
     def _lnq_jac(self):
         return np.array([getattr(self, "_lnq_%s"%x) for x in 'hab'])
 
-    @cached
+    @_cached
     def _lnq_jac_(self):
         return np.array([getattr(self, "_lnq_%s_"%x) for x in 'hab'])
 
-    @cached
+    @_cached
     def _lnq_hess(self):
         return np.array([getattr(self, "_lnq_%s_%s"%(x, y)) for x, y in ('hh', 'ha', 'hb',
                                                                          'ha', 'aa', 'ab',
                                                                          'hb', 'ab', 'bb')]).reshape(
                 (3, 3, len(self.m)))
 
-    @cached
+    @_cached
     def _lnq_hess_(self):
         return np.array([getattr(self, "_lnq_%s_%s_"%(x, y)) for x, y in ('hh', 'ha', 'hb',
                                                                           'ha', 'aa', 'ab',
@@ -574,8 +571,9 @@ class PerObjLike(core.MRP):
 
         Calculated numerically from the :method:`~hessian`. A 3x3 matrix.
         """
-        s = np.sqrt(np.diag(self.cov))
-        return self.cov/np.outer(s, s)
+        cov = self.cov
+        s = np.sqrt(np.diag(cov))
+        return cov/np.outer(s, s)
 
 
 class PerObjLikeWeights(PerObjLike):
@@ -605,11 +603,11 @@ class PerObjLikeWeights(PerObjLike):
         super(PerObjLikeWeights, self).__init__(*args, **kwargs)
         self.weights = weights
 
-    @cached
+    @_cached
     def _scaled_mass(self):
         return self.weights*self.m**self.scale
 
-    @cached
+    @_cached
     def _mean_scaling(self):
         return np.sum(self._scaled_mass)/np.sum(self.weights)
 
@@ -709,51 +707,51 @@ class CurveLike(PerObjLike):
         elif sig_rhomean == 0:
             self._norm = np.log(core.A_rhoc(self.logHs, self.alpha, self.beta, Om0, rhoc))
 
-    @cached
+    @_cached
     def _zk(self):
         """
         The z-factor for the total integral, i.e.: (alpha+2)/beta.
         """
         return (self.alpha + 2)/self.beta
 
-    @cached
+    @_cached
     def mw_integ(self):
         if self._mw_integ is not None:
             return self._mw_integ
         else:
-            return simps(self.mw_data, self.m)
+            return intg.simps(self.mw_data, self.m)
 
     # ===========================================================================
     # Basic likelihood
     # ===========================================================================
-    @cached
+    @_cached
     def _fdata(self):
         return self._lng + self.scale*self.logHs*ln10 - np.log(self.mw_data)
 
-    @cached
+    @_cached
     def _delta_data(self):
         """
         Distance between log theory and log data
         """
         return self.lnA + self._fdata
 
-    @cached
+    @_cached
     def _fint(self):
         return -np.log(self.mw_integ/self._q_) + self.scale*self.logHs*ln10
 
-    @cached
+    @_cached
     def _delta_integ(self):
         return self.lnA + self._fint
 
-    @cached
+    @_cached
     def _frho(self):
         return - np.log(core.A_rhoc(self.logHs, self.alpha, self.beta, self.Om0, self.rhoc))
 
-    @cached
+    @_cached
     def _delta_rhomean(self):
         return self.lnA + self._frho
 
-    @cached
+    @_cached
     def _lnLi(self):
         """
         Logarithmic likelihood of the samples
@@ -773,51 +771,51 @@ class CurveLike(PerObjLike):
     # ===========================================================================
     # Simple lnk(theta) derivatives
     # ===========================================================================
-    @cached
+    @_cached
     def _lnk(self):
         return np.log(self._k)
 
-    @cached
+    @_cached
     def _lnk_h(self):
         return 2*ln10
 
-    @cached
+    @_cached
     def _lnk_a(self):
-        return polygamma(0, self._zk)/self.beta
+        return sp.polygamma(0, self._zk)/self.beta
 
-    @cached
+    @_cached
     def _lnk_b(self):
         return -self._lnk_a*self._zk
 
-    @cached
+    @_cached
     def _lnk_h_h(self):
         return 0
 
-    @cached
+    @_cached
     def _lnk_h_a(self):
         return 0
 
-    @cached
+    @_cached
     def _lnk_h_b(self):
         return 0
 
-    @cached
+    @_cached
     def _lnk_a_a(self):
-        return polygamma(1, self._zk)/self.beta**2
+        return sp.polygamma(1, self._zk)/self.beta**2
 
-    @cached
+    @_cached
     def _lnk_a_b(self):
         return -(self._lnk_a_a*self._zk + self._lnk_a/self.beta)
 
-    @cached
+    @_cached
     def _lnk_b_b(self):
         return self._lnk_a_a*self._zk**2 + 2*self._zk*self._lnk_a/self.beta
 
-    @cached
+    @_cached
     def _lnk_jac(self):
         return np.array([getattr(self, "_lnk_%s"%x) for x in "hab"])
 
-    @cached
+    @_cached
     def _lnk_hess(self):
         return np.array([getattr(self, "_lnk_%s_%s"%(x, y)) for x, y in ('hh', 'ha', 'hb',
                                                                          'ha', 'aa', 'ab',
@@ -826,27 +824,27 @@ class CurveLike(PerObjLike):
     # ===========================================================================
     # Jacobian etc.
     # ===========================================================================
-    @cached
+    @_cached
     def _fdata_jac(self):
         return np.array([self._lng_h + self.scale*ln10, self._lng_a, self._lng_b])
 
-    @cached
+    @_cached
     def _delta_data_jac(self):
         return np.vstack((self._fdata_jac, np.ones_like(self.m)))
 
-    @cached
+    @_cached
     def _fint_jac(self):
         return np.array([self._lnq_h_ + self.scale*ln10, self._lnq_a_, self._lnq_b_])
 
-    @cached
+    @_cached
     def _delta_integ_jac(self):
         return np.concatenate((self._fint_jac, [1]))
 
-    @cached
+    @_cached
     def _frho_jac(self):
         return self._lnk_jac
 
-    @cached
+    @_cached
     def _delta_rhomean_jac(self):
         return np.concatenate((self._frho_jac,[1]))
 
@@ -883,7 +881,7 @@ class CurveLike(PerObjLike):
         else:
             return -(data_term + erri + errm)
 
-    @cached
+    @_cached
     def _simple_sum(self):
         data = np.sum(self._delta_data/self.sig_data**2)
         integ = 0
@@ -900,7 +898,7 @@ class CurveLike(PerObjLike):
     #         [[getattr(self, "_lng_%s_%s"%(x if i < j else y, x if i > j else y)) for i, x in enumerate("hab")] for j, y
     #          in enumerate("hab")])
 
-    @cached
+    @_cached
     def _lngx_lngy(self):
         return np.array([[getattr(self, "_lng_%s"%x)*getattr(self, "_lng_%s"%y) for x in "hab"] for y in "hab"])
 
@@ -910,7 +908,7 @@ class CurveLike(PerObjLike):
     #         [[getattr(self, "_lnq_%s_%s_"%(x if i < j else y, x if i > j else y)) for i, x in enumerate("hab")] for j, y
     #          in enumerate("hab")])
 
-    @cached
+    @_cached
     def _lnqx_lnqy_(self):
         return np.array([[getattr(self, "_lnq_%s_"%x)*getattr(self, "_lnq_%s_"%y) for x in "hab"] for y in "hab"])
 
@@ -920,58 +918,58 @@ class CurveLike(PerObjLike):
     #         [[getattr(self, "_lnk_%s_%s"%(x if i < j else y, x if i > j else y)) for i, x in enumerate("hab")] for j, y
     #          in enumerate("hab")])
 
-    @cached
+    @_cached
     def _lnkx_lnky(self):
         return np.array([[getattr(self, "_lnk_%s"%x)*getattr(self, "_lnk_%s"%y) for x in "hab"] for y in "hab"])
 
-    @cached
+    @_cached
     def _lnkx_lngy(self):
         return np.array([[getattr(self, "_lnk_%s"%x)*getattr(self, "_lng_%s"%y) for x in "hab"] for y in "hab"])
 
-    @cached
+    @_cached
     def _lnqx_lngy(self):
         return np.array([[getattr(self, "_lnq_%s_"%x)*getattr(self, "_lng_%s"%y) for x in "hab"] for y in "hab"])
 
-    @cached
+    @_cached
     def _delta_data_jac_sq(self):
         dj = np.atleast_2d(self._delta_data_jac)
         return np.sum(np.einsum("ij,kj->ijk", dj, dj)/self.sig_data**2, axis=1)
 
-    @cached
+    @_cached
     def _delta_integ_jac_sq(self):
         return np.outer(self._delta_integ_jac, self._delta_integ_jac)
 
-    @cached
+    @_cached
     def _frho_jac_sq(self):
         return np.outer(self._frho_jac,self._frho_jac)
 
-    @cached
+    @_cached
     def _delta_rhomean_jac_sq(self):
         return np.outer(self._delta_rhomean_jac, self._delta_rhomean_jac)
 
-    @cached
+    @_cached
     def _fint_jac_sq(self):
         return np.outer(self._fint_jac,self._fint_jac)
 
-    @cached
+    @_cached
     def _delta_data_hess(self):
         out = np.zeros((4, 4, len(self.m)))
         out[:-1, :-1, :] = self._lng_hess
         return out
 
-    @cached
+    @_cached
     def _delta_integ_hess(self):
         out = np.zeros((4, 4))
         out[:-1, :-1] = self._lnq_hess_
         return out
 
-    @cached
+    @_cached
     def _delta_rhomean_hess(self):
         out = np.zeros((4, 4))
         out[:-1, :-1] = self._lnk_hess
         return out
 
-    @cached
+    @_cached
     def _gradsum(self):
         data = np.sum(self._fdata_jac/self.sig_data**2,axis=-1)
         integ = np.zeros(3)

@@ -7,9 +7,9 @@ definition of the likelihood involved in the fits within this module see
 :class:`mrpy.likelihoods.CurveLike`.
 """
 import numpy as np
-from scipy.optimize import minimize
-from scipy.integrate import simps
-from likelihoods import CurveLike
+import scipy.optimize as opt
+import scipy.integrate as intg
+import likelihoods as lk
 
 
 def get_fit_curve(m, dndm, hs0=14.5, alpha0=-1.9, beta0=0.8, lnA0=-40,
@@ -130,7 +130,7 @@ def get_fit_curve(m, dndm, hs0=14.5, alpha0=-1.9, beta0=0.8, lnA0=-40,
     # For efficiency, take log of data and do integral here.
     lndm = np.log(dndm)
     mw_data = dndm*m**s
-    mass_weighted_integ = simps(mw_data, m)
+    mass_weighted_integ = intg.simps(mw_data, m)
 
     # Define the objective function for minimization.
     def model(p):
@@ -144,7 +144,7 @@ def get_fit_curve(m, dndm, hs0=14.5, alpha0=-1.9, beta0=0.8, lnA0=-40,
             alpha = 0
             hs, beta = p
 
-        _curve = CurveLike(logm=np.log10(m), logHs=hs, alpha=alpha, beta=beta, norm=lnA,
+        _curve = lk.CurveLike(logm=np.log10(m), logHs=hs, alpha=alpha, beta=beta, norm=lnA,
                            sig_rhomean=sigma_rhomean, sig_integ=sigma_integ, scale=s,
                            mw_data=mw_data, mw_integ=mass_weighted_integ)
         if jac:
@@ -189,13 +189,13 @@ def get_fit_curve(m, dndm, hs0=14.5, alpha0=-1.9, beta0=0.8, lnA0=-40,
         p0 = [hs0, alpha0, beta0, lnA0]
         if bounds: bounds = [hs_bounds, alpha_bounds, beta_bounds, lnA_bounds]
 
-    res = minimize(model, p0, bounds=bounds, jac=jac, **minimize_kw)
+    res = opt.minimize(model, p0, bounds=bounds, jac=jac, **minimize_kw)
 
     lnA = None
     if len(res.x) == 4:
         lnA = res.x[3]
 
-    c = CurveLike(logm=np.log10(m), logHs=res.x[0], alpha=res.x[1], beta=res.x[2], norm=lnA,
+    c = lk.CurveLike(logm=np.log10(m), logHs=res.x[0], alpha=res.x[1], beta=res.x[2], norm=lnA,
                   sig_rhomean=sigma_rhomean, sig_integ=sigma_integ, scale=s, mw_data=mw_data,
                   mw_integ=mass_weighted_integ)
 

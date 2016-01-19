@@ -15,13 +15,13 @@ arbitrary transformations. See the docs for :class:`ReparameteriseMRP` for more
 details.
 """
 
-from cached_property import cached_property as cached
-from core import MRP
-from likelihoods import PerObjLike, CurveLike
+from cached_property import cached_property as _cached
+import core
+import likelihoods as lk
 import numpy as np
 
 
-class ReparameteriseMRP(MRP):
+class ReparameteriseMRP(core.MRP):
     """
     Base class for reparameterising the MRP.
 
@@ -50,7 +50,9 @@ class ReparameteriseMRP(MRP):
         All of the other parameters are passed directly to the super-class.
 
     """
+    # Step-size to use in numerical derivatives
     eps = 1e-6
+
     def __init__(self,p1=None,p2=None,p3=None, logHs=None,alpha=None,beta=None,**kwargs):
         if not p1 is None and not p2 is None and not p3 is None:
             self.p1, self.p2, self.p3 = p1,p2,p3
@@ -82,7 +84,7 @@ class ReparameteriseMRP(MRP):
         return np.array([kwargs.get("p%s"%i, getattr(self, "p%s"%i)) for i in range(3)])
 
 
-class ReparameterisePerObjLike(ReparameteriseMRP, PerObjLike):
+class ReparameterisePerObjLike(ReparameteriseMRP, lk.PerObjLike):
     """
     An extension of :class:`ReparameteriseMRP` which adds necessary methods for calculating
     jacobians and hessians for per-object likelihoods.
@@ -158,14 +160,16 @@ class ReparameterisePerObjLike(ReparameteriseMRP, PerObjLike):
         p3 = kwargs.pop("p3", self.p3)
         return (self._dtheta_dp3(p3=p3 + self.eps, **kwargs) - f0)/self.eps
 
-    @cached
+    @property
     def this_jacobian(self):
+        """Jacobian of the reparameterisation."""
         j = self.jacobian
         return np.array([np.dot(j, self._dtheta_dp1()), np.dot(j, self._dtheta_dp2()),
                          np.dot(j, self._dtheta_dp3())])
 
-    @cached
+    @property
     def this_hessian(self):
+        """Hessian of the reparameterisation."""
         # jac and hess of lnL with MRP params
         j = self.jacobian
         H = self.hessian
@@ -185,29 +189,35 @@ class ReparameterisePerObjLike(ReparameteriseMRP, PerObjLike):
         out = np.array([[h11, h12, h13], [h12, h22, h23], [h13, h23, h33]])
         return out
 
-    @cached
+    @property
     def this_cov(self):
+        """Covariance matrix of the reparameterisation,"""
         return np.linalg.inv(-self.this_hessian)
 
-    @cached
+    @property
     def cov_ratio(self):
+        """Ratio of the reparameterised covariance to the standard covariance."""
         return self.this_cov/self.cov
 
-    @cached
+    @property
     def hess_ratio(self):
+        """"Ratio of the reparameterised hessian to the standard hessian."""
         return self.this_hessian/self.hessian
 
-    @cached
+    @property
     def this_corr(self):
-        s = np.sqrt(np.diag(self.this_cov))
-        return self.this_cov/np.outer(s, s)
+        """Correlation matrix of the reparameterisation."""
+        cov = self.this_cov
+        s = np.sqrt(np.diag(cov))
+        return cov/np.outer(s, s)
 
-    @cached
+    @property
     def corr_ratio(self):
+        """Ratio of the reparameterised correlation to the standard correlation."""
         return self.this_corr/self.corr
 
 
-class ReparameteriseCurveLike(ReparameterisePerObjLike, CurveLike):
+class ReparameteriseCurveLike(ReparameterisePerObjLike, lk.CurveLike):
     """
     An extension of :class:`ReparameteriseMRP` which adds necessary methods for calculating
     jacobians and hessians for chi-square likelihoods.

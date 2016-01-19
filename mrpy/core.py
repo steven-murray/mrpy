@@ -9,9 +9,9 @@ This does not in principle restrict the usage of the MRP for other applications,
 functions or other data.
 """
 import numpy as np
-from special import gammainc, gamma
-from stats import TGGD
-from cached_property import cached_property as cached
+import special as sp
+import stats
+from cached_property import cached_property as _cached
 
 
 def entire_integral(logHs, alpha, beta, s=1):
@@ -39,7 +39,7 @@ def entire_integral(logHs, alpha, beta, s=1):
     s : array_like, optional
         Weighting (or `scaling`) of the integral.
     """
-    return 10**((s + 1)*logHs)*gamma((alpha + 1 + s)/beta)
+    return 10**((s + 1)*logHs)*sp.gamma((alpha + 1 + s)/beta)
 
 def log_mass_mode(logHs,alpha,beta):
     """
@@ -119,7 +119,7 @@ def A_rhoc(logHs, alpha, beta, Om0=0.3, rhoc=2.7755e11):
 
 def _getnorm(norm, logHs, alpha, beta, mmin, log=False, **Arhoc_kw):
     if norm == "pdf":
-        x = TGGD(scale=10**logHs, a=alpha, b=beta, xmin=mmin)._pdf_norm(log)
+        x = stats.TGGD(scale=10**logHs, a=alpha, b=beta, xmin=mmin)._pdf_norm(log)
         if log:
             return -x
         else:
@@ -143,7 +143,7 @@ def _head(m, logHs, alpha, beta, mmin=None, norm="pdf", log=False, **Arhoc_kw):
     if mmin is None:
         mmin = m.min()
 
-    tggd = TGGD(a=alpha, b=beta, xmin=mmin, scale=10**logHs)
+    tggd = stats.TGGD(a=alpha, b=beta, xmin=mmin, scale=10**logHs)
 
     A = _getnorm(norm, logHs, alpha, beta, mmin, log, **Arhoc_kw)
     return tggd, A
@@ -210,7 +210,7 @@ def ngtm(m, logHs, alpha, beta, mmin=None, mmax=np.inf, norm="pdf", log=False, *
     %s
     """
     t, A = _head(m, logHs, alpha, beta, mmin, norm, log, **Arhoc_kw)
-    t = TGGD(a=alpha, b=beta, xmin=m, scale=10**logHs)
+    t = stats.TGGD(a=alpha, b=beta, xmin=m, scale=10**logHs)
     shape = t._pdf_norm(log)
 
     return _tail(shape, A, log)
@@ -226,7 +226,7 @@ def rho_gtm(m, logHs, alpha, beta, mmin=None, mmax=np.inf, norm="pdf", log=False
     %s
     """
     t, A = _head(m, logHs, alpha, beta, mmin, norm, log, **Arhoc_kw)
-    shape = 10**(2*logHs)*gammainc((alpha + 2)/beta, (m/10**logHs)**beta)
+    shape = 10**(2*logHs)*sp.gammainc((alpha + 2)/beta, (m/10**logHs)**beta)
     if log:
         shape = np.log(shape)
     return _tail(shape, A, log)
@@ -352,7 +352,7 @@ class MRP(object):
 
         This is basically a :class:`mrpy.stats.TGGD` class.
         """
-        return TGGD(scale=self.Hs, a=self.alpha, b=self.beta, xmin=self.mmin)
+        return stats.TGGD(scale=self.Hs, a=self.alpha, b=self.beta, xmin=self.mmin)
 
     @property
     def lnA(self):
@@ -408,7 +408,6 @@ class MRP(object):
         ----------
         log : logical
             Whether to return the natural log of the density.
-
         """
         return rho_gtm(self.m, self.logHs, self.alpha, self.beta, mmin=self.log_mmin,
                        norm=self.A, log=log)
@@ -423,7 +422,7 @@ class MRP(object):
         """
         return log_mass_mode(self.logHs, self.alpha, self.beta)
 
-    @cached
+    @_cached
     def _k(self):
         """
         The integral of the mass-weighted MRP down to ``m=0`` (i.e. disregarding

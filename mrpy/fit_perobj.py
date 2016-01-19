@@ -9,12 +9,13 @@ definition of the likelihood involved in the fits within this module see
 This module also provides pre-defined prior functions, specifically, the ``normal_prior``.
 """
 import pickle
-from hashlib import md5
-from os.path import expanduser, join, exists
+import hashlib
+from os import path
 import os
 import numpy as np
-from scipy.optimize import minimize
-from likelihoods import PerObjLikeWeights, PerObjLike
+import scipy.optimize as opt
+import likelihoods as lk
+#from likelihoods import PerObjLikeWeights
 from scipy.stats import truncnorm
 
 try:
@@ -68,7 +69,7 @@ def _lnl(p, m, nm, mmin, s, hs_bounds, alpha_bounds,
 
     # Likelihood
     for mi, nmi, mmini in zip(m, nm, mmin):
-        _mod = PerObjLikeWeights(weights=nmi, scale=s, logm=np.log10(mi),
+        _mod = lk.PerObjLikeWeights(weights=nmi, scale=s, logm=np.log10(mi),
                                  log_mmin=np.log10(mmini),
                                  logHs=p[0], alpha=p[1], beta=p[2])
         ll += _mod.lnL
@@ -241,7 +242,7 @@ class PerObjFit(object):
             Whether to use analytic jacobian (usually a good idea)
 
         minimize_kw : dict
-            Any other parameters to :func:`scipy.minimize`.
+            Any other parameters to :func:`scipy.optimize.minimize`.
 
         Returns
         -------
@@ -286,12 +287,12 @@ class PerObjFit(object):
         """
         p0 = [hs0, alpha0, beta0]
         bounds = [self.hs_bounds, self.alpha_bounds, self.beta_bounds]
-        self.downhill_res = minimize(_objfunc, p0, args=(self.m, self.nm, self.mmin, self.weight_scale, (0, np.inf),
+        self.downhill_res = opt.minimize(_objfunc, p0, args=(self.m, self.nm, self.mmin, self.weight_scale, (0, np.inf),
                                                          (-np.inf, np.inf), (0, np.inf), self.prior_func,self.prior_kwargs,
                                                          debug, jac),
                                      bounds=bounds, jac=jac, **minimize_kw)
 
-        self.downhill_obj = [PerObjLikeWeights(scale=self.weight_scale, logm=np.log10(mi), weights=nmi,
+        self.downhill_obj = [lk.PerObjLikeWeights(scale=self.weight_scale, logm=np.log10(mi), weights=nmi,
                                                logHs=self.downhill_res.x[0], alpha=self.downhill_res.x[1],
                                                beta=self.downhill_res.x[2],
                                                log_mmin=np.log10(mmini)) for mi, nmi, mmini in
@@ -436,238 +437,6 @@ class PerObjFit(object):
         return _lnl(p, self.m, self.nm, self.mmin, self.weight_scale, self.hs_bounds,
                     self.alpha_bounds, self.beta_bounds, self.prior_func,
                     debug, ret_jac)
-
-
-# def fit_perobj_opt(m, hs0=14.5, alpha0=-1.9, beta0=0.8,
-#                    Om0=0.3, rhoc=2.7755e11, s=0, bounds=True,
-#                    hs_bounds=(10, 16), alpha_bounds=(-1.99, -1.3),
-#                    beta_bounds=(0.1, 2.0), jac=True, **minimize_kw):
-#     """
-#     Per-object downhill fit for masses m.
-#
-#     Parameters
-#     ----------
-#     m : array
-#         Masses
-#
-#     hs0, alpha0, beta0: float, optional
-#         Initial guess for each of the MRP parameters.
-#
-#     s : float, optional
-#         Mass scaling. Setting this greater than 0 upweights higher valued
-#         variates, `m`, with a weight of ``m**s``.
-#
-#     bounds : None or True
-#         If None, don't use bounds. If true, set bounds based on bounds passed.
-#
-#     hs_bounds, alpha_bounds, beta_bounds : 2-tuple
-#         2-tuples specifying minimum and maximum values for each bound.
-#
-#     jac : bool, optional
-#         Whether to use analytic jacobian (usually a good idea)
-#
-#     minimize_kw : dict
-#         Any other parameters to :func:`scipy.minimize`.
-#
-#     Returns
-#     -------
-#     res : `OptimizeResult`
-#         The optimization result represented as a ``OptimizeResult`` object
-#         (see scipy documentation).
-#         Important attributes are: ``x`` the solution array, ``success`` a Boolean flag
-#         indicating if the optimizer exited successfully and ``message`` which describes
-#         the cause of the termination.
-#
-#         The parameters are ordered by `logHs`, `alpha`, `beta`, `[lnA]`.
-#
-#     perobj : :class:`mrpy.likelihoods.PerObjLike` object
-#         An object containing the solution parameters and methods to access
-#         relevant quantities, such as the mass function, or jacobian and
-#         hessian at the solution.
-#
-#     Notes
-#     -----
-#     Though the option to *not* use bounds for the fit is available, at this point
-#     it seems to yield unpredictable results. Unless the problem at hand is so poorly
-#     known as to be impossible to set appropriate bounds, it is encouraged to use them.
-#
-#     Furthermore, use as stringent bounds as possible, since the algorithm explores the
-#     edges, which can induce numerical error if values far from the solution are chosen.
-#
-#     The setting of `s` can be tricky. It is sometimes necessary to set it higher than 0
-#     to achieve reasonable precision on `beta`, due to the severe relative lack of high-value
-#     variates. Nevertheless, doing so in general decreases the reliability of the fit. Simple
-#     tests show that in typical cases, about 4 times as many variates are required for an ``s=1``
-#     fit to achieve the same accuracy on parameters.
-#
-#     Examples
-#     --------
-#     The most obvious example is to generate a sample of variates from given parameters:
-#
-#     >>> from mrpy.stats import TGGD
-#     >>> r = TGGD(scale=1e14,a=-1.8,b=1.0,xmin=1e12).rvs(1e5)
-#
-#     Then find the best-fit parameters for the resulting data:
-#
-#     >>> from mrpy.fit_perobj import fit_perobj_opt
-#     >>> res,obj = fit_perobj_opt(r)
-#     >>> print res.x
-#
-#     We can also use the ``obj`` object to explore some of the qualities of the fit
-#
-#     >>> print obj.hessian
-#     >>> print obj.cov
-#     >>> from matplotlib.pyplot import plot
-#     >>> plot(obj.logm,obj.dndm(log=True))
-#     >>> print obj.stats.mean, r.mean()
-#     """
-#
-#     # Define the objective function for minimization.
-#     def model(p):
-#         _mod = PerObjLike(scale=s, logm=np.log10(m), logHs=p[0], alpha=p[1], beta=p[2])
-#
-#         if jac:
-#             return -_mod.lnL, -_mod.jacobian
-#         else:
-#             return -_mod.lnL
-#
-#     p0 = [hs0, alpha0, beta0]
-#     if bounds:
-#         bounds = [hs_bounds, alpha_bounds, beta_bounds]
-#     res = minimize(model, p0, bounds=bounds, jac=jac, **minimize_kw)
-#
-#     perobj = PerObjLike(scale=s, logm=np.log10(m), logHs=res.x[0], alpha=res.x[1],
-#                         beta=res.x[2])
-#
-#     return res, perobj
-
-
-#
-# def fit_perobj_emcee(m, nm=None,mmin=None,nchains=50,warmup=1000,iterations=1000,
-#                      hs0=14.5, alpha0=-1.9, beta0=0.8,
-#                      Om0=0.3, rhoc=2.7755e11,
-#                      s=0, bounds=True, hs_bounds=(12, 16), alpha_bounds=(-1.99, -1.3),
-#                      beta_bounds=(0.3, 2.0),opt_init=False,opt_kw={},
-#                      prior_func=None,debug=0,
-#                      **kwargs):
-#     """
-#     Per-object MCMC fit for masses `m`, using the `emcee` package.
-#
-#     Parameters
-#     ----------
-#     m : array
-#         Masses. Either an array or a list of arrays, each of which is a sample *to be
-#         analysed simultaneously*. In the latter case the samples should have the same
-#         underlying distribution, but may have differing truncation scales.
-#
-#     nm : array, optional
-#         Specifies the number of occurrences of each variate in `m` (which should then
-#         ideally be unique). If not passed, each variate is assumed to occur once. This
-#         is useful for speeding up fits on quantized simulations. If `m` is a list of
-#         arrays, this should be also.
-#
-#     mmin : array_like, optional
-#         The truncation mass of the sample. By default takes the lowest value of `m`.
-#         If `m` is a list of arrays, this should be a list.
-#
-#     nchains : int, optional
-#         Number of chains to use in the AIES MCMC algorithm
-#
-#     warmup : int, optional
-#         Number (discarded) warmup iterations.
-#
-#     iterations : int, optional
-#         Number of iterations to keep in the chain.
-#
-#     hs0, alpha0, beta0: float, optional
-#         Initial guess for each of the MRP parameters.
-#
-#     s : float, optional
-#         Mass scaling. Setting this greater than 0 upweights higher valued
-#         variates, `m`, with a weight of ``m**s``.
-#
-#     bounds : None or True
-#         If None, don't use bounds. If true, set bounds based on bounds passed.
-#
-#     hs_bounds, alpha_bounds, beta_bounds : 2-tuple
-#         2-tuples specifying minimum and maximum values for each bound.
-#
-#     opt_init : bool, optional
-#         Whether to run a downhill optimization routine to get the best
-#         starting point for the MCMC.
-#
-#     opt_kw : dict, optional
-#         Any arguments to pass to the downhill run.
-#
-#     prior_func : function, optional
-#         A function to calculate the likelihood arising from priors on the parameters.
-#         By default, uniform priors are assumed, which add nothing to the likelihood.
-#         The only parameter taken by the function should be the vector of parameter
-#         values, ``[logHs,alpha,beta]``.
-#
-#     debug : int, optional
-#         Set the level of info printed out throughout the function. Highest current
-#         level that is useful is 2.
-#
-#     kwargs :
-#         Any other parameters to :class:`emcee.EnsembleSampler`.
-#
-#     Returns
-#     -------
-#     mcmc_res : :class:`emcee.EnsembleSampler` object
-#         This object contains the stored chains, and other attributes.
-#
-#     Notes
-#     -----
-#     The setting of `s` can be tricky. It is sometimes necessary to set it higher than 0
-#     to achieve reasonable precision on `beta`, due to the severe relative lack of high-value
-#     variates. Nevertheless, doing so in general decreases the reliability of the fit. Simple
-#     tests show that in typical cases, about 4 times as many variates are required for an ``s=1``
-#     fit to achieve the same accuracy on parameters.
-#
-#     Examples
-#     --------
-#     The most obvious example is to generate a sample of variates from given parameters:
-#
-#     >>> from mrpy.stats import TGGD
-#     >>> r = TGGD(scale=1e14,a=-1.8,b=1.0,xmin=1e12).rvs(1e5)
-#
-#     Then find the best-fit parameters for the resulting data:
-#
-#     >>> from mrpy.fit_perobj import fit_perobj_emcee
-#     >>> res = fit_perobj_emcee(r,nchains=10,warmup=100,iterations=100)
-#     >>> print res.flatchain.mean(axis=0)
-#     """
-#
-#
-#     # First, set guess, either by optimization or passed values
-#     guess = np.array([hs0,alpha0,beta0])
-#     if opt_init:
-#         res = fit_perobj_opt(m, hs0, alpha0, beta0, Om0, rhoc, s, bounds, hs_bounds, alpha_bounds,
-#                              beta_bounds, **opt_kw)[0]
-#         if res.success:
-#             guess = res.x
-#             if debug:
-#                 print "Optimization result (used as guess): ", guess
-#         else:
-#             print "WARNING: Optimization failed. Falling back on given guess."
-#
-#     initial = _get_initial_ball(guess,nchains,hs_bounds,alpha_bounds,beta_bounds)
-#
-#
-#
-#
-#     mcmc_res = emcee.EnsembleSampler(nchains,initial.shape[1],model,**kwargs)
-#
-#     if warmup:
-#         initial, lnprob, rstate = mcmc_res.run_mcmc(initial, warmup, storechain=False)
-#         mcmc_res.reset()
-#
-#     mcmc_res.run_mcmc(initial, iterations)
-#
-#     return mcmc_res
-
-
 
 # =========================================================================================
 # STAN ROUTINES
@@ -824,11 +593,11 @@ def _compile_model(per_object_errors=False):
 
 
 def _stan_cache(model_code, model_name=None):
-    code_hash = md5(model_code.encode('ascii')).hexdigest()
+    code_hash = hashlib.md5(model_code.encode('ascii')).hexdigest()
 
     # Find the mrpy project dir
-    dir = join(expanduser("~"), '.mrpy')
-    if not exists(dir):
+    dir = path.join(path.expanduser("~"), '.mrpy')
+    if not path.exists(dir):
         os.makedirs(dir)
 
     if model_name is None:
@@ -837,10 +606,10 @@ def _stan_cache(model_code, model_name=None):
         cache_fn = 'cached-{}-{}.pkl'.format(model_name, code_hash)
 
     try:
-        sm = pickle.load(open(join(dir, cache_fn), 'rb'))
+        sm = pickle.load(open(path.join(dir, cache_fn), 'rb'))
     except:
         sm = pystan.StanModel(model_code=model_code, model_name=model_name)
-        with open(join(dir, cache_fn), 'wb') as f:
+        with open(path.join(dir, cache_fn), 'wb') as f:
             pickle.dump(sm, f)
     else:
         print("Using cached StanModel")
