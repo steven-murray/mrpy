@@ -22,14 +22,17 @@ before_install:
   - conda info -a
 
 install:
-  - conda install python=$TRAVIS_PYTHON_VERSION numpy scipy mpmath
-  - conda install -c dan_blanchard python-coveralls nose-cov
+  - conda install python=$TRAVIS_PYTHON_VERSION numpy scipy mpmath nose
+  - pip install python-coveralls
+#  conda install -c dan_blanchard python-coveralls nose-cov
   - pip install cached_property
+  - pip install coveralls
 
 script:
-  - nosetests --with-coverage --cover-package mrpy
+  - nosetests --with-coverage --cover-package=mrpy
 
 
 # Calculate coverage
 after_success:
+  - ls -a
   - coveralls
