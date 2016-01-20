@@ -4,6 +4,13 @@ Changelog
 Development Version
 -------------------
 
+Enhancements
+++++++++++++
+- New "getting started" example.
+
+v1.0.0
+------
+
 Features
 ++++++++
 - New ``PerObjFit`` class supersedes ``get_fit_perobj`` function, providing more
