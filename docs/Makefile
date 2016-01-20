@@ -53,7 +53,6 @@ clean:
 	rm -rf $(BUILDDIR)/*
 
 html:
-	cd examples && jupyter nbconvert *.ipynb --to rst && rm -rf ../exampledoc/*_files/ && mv *_files ../exampledoc/ && mv *.rst ../exampledoc/
 	$(SPHINXBUILD) -b html $(ALLSPHINXOPTS) $(BUILDDIR)/html
 	@echo
 	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html."
