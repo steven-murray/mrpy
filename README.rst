@@ -45,14 +45,14 @@ Features
 With `mrpy` you can:
 
 - Calculate basic statistics of the truncated generalised gamma distribution (TGGD) with the `TGGD` class: mean,
-mode, variance, skewness, pdf, cdf, generate random variates etc.
+  mode, variance, skewness, pdf, cdf, generate random variates etc.
 - Generate MRP quantities with the `MRP` class: differential number counts, cumulative number counts, various methods
-for generating normalisations.
+  for generating normalisations.
 - Generate the MRP-based halo mass function as a function of physical parameters via the `mrp_b13` function.
 - Fit MRP parameters to data in the form of arbitrary curves with the `get_fit_curve` function.
 - Fit MRP parameters to data in the form of a sample of variates with the `PerObjFit` class: simulation data is supported
-with extra efficiency, simulation suites fitted simultaneously is also supported, arbitrary priors on parameters,
-log-normal uncertainties on variates supported through a Stan-based routine.
+  with extra efficiency, simulation suites fitted simultaneously is also supported, arbitrary priors on parameters,
+  log-normal uncertainties on variates supported through a Stan-based routine.
 - Calculate analytic hessians, jacobians at any point (including the solution of a fit).
 - Use alternate parameterisations of the same form via the `reparameterise` module.
 - Work with a special entirely analytic model to understand the effects of various parameters in the `analytic_model` module.
