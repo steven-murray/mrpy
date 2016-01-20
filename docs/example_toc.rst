@@ -9,14 +9,14 @@ the API documentation for each object. So, what would you like to learn?
 .. toctree::
    :maxdepth: 2
 
-   exampledoc/fit_curve_against_analytic
-   exampledoc/fit_simulation_suite
-   exampledoc/heirarchical_model_stan
-   exampledoc/explore_analytic_model
-   exampledoc/mmin_dependence
-   exampledoc/physical_dependence
-   exampledoc/reparameterization_performance
-   exampledoc/SMHM
-   exampledoc/double_schechter_gsmf
+   _exampledoc/fit_curve_against_analytic
+   _exampledoc/fit_simulation_suite
+   _exampledoc/heirarchical_model_stan
+   _exampledoc/explore_analytic_model
+   _exampledoc/mmin_dependence
+   _exampledoc/physical_dependence
+   _exampledoc/reparameterization_performance
+   _exampledoc/SMHM
+   _exampledoc/double_schechter_gsmf
 
 
