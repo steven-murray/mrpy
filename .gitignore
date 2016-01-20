@@ -5,4 +5,4 @@ mrpy.egg-info
 *.pyc
 docs/_*
 *-checkpoint.ipynb
-examples/*/*
+docs/examples/*/*

@@ -9,23 +9,25 @@ Features
 - New ``PerObjFit`` class supersedes ``get_fit_perobj`` function, providing more
   coherent fitting capabilities.
 - Added heaps of "real-world" examples (used in MRP paper):
-    - explore_analytic_model
-    - fit_curve_against_analytic
-    - fit_simulation_suite
-    - heirarchical_model_stan
-    - mmin_dependence
-    - physical_dependence
-    - reparameterization_performance
+    * https://github/steven-murray/mrpy/docs/examples/fit_curve_against_analytic.ipynb
+    * https://github/steven-murray/mrpy/docs/examples/fit_simulation_suite.ipynb
+    * https://github/steven-murray/mrpy/docs/examples/heirarchical_model_stan.ipynb
+    * https://github/steven-murray/mrpy/docs/examples/explore_analytic_model.ipynb
+    * https://github/steven-murray/mrpy/docs/examples/mmin_dependence.ipynb
+    * https://github/steven-murray/mrpy/docs/examples/physical_dependence.ipynb
+    * https://github/steven-murray/mrpy/docs/examples/parameterization_performance.ipynb
+    * https://github/steven-murray/mrpy/docs/examples/SMHM.ipynb
 - Added ``model`` argument to ``fit_perobj_stan`` to facilitate pickling of multiple fits.
 - Added ability to send keyword arguments to priors in ``PerObjFit`` class
 - Added a ``normal_prior`` function for simple normal priors.
 
 Enhancements
 ++++++++++++
-- changed default weighting from 1 to 0 in ``get_fit_curve``.
-- added tests for the ``PerObjLikeWeights`` class.
-- added tests for ``nbar`` and ``rhobar`` for general ``m`` in ``MRP` subclasses.
-- changed imports so that they wouldn't show up in docs
+- Changed default weighting from 1 to 0 in ``get_fit_curve``.
+- Added tests for the ``PerObjLikeWeights`` class.
+- Added tests for ``nbar`` and ``rhobar`` for general ``m`` in ``MRP` subclasses.
+- Changed imports so that they wouldn't show up in docs
+- Many improvements to documentation (including this file!)
 
 Bugfixes
 ++++++++
