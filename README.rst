@@ -1,14 +1,14 @@
 mrpy
 ====
+.. image:: https://travis-ci.org/steven-murray/mrpy.png?branch=master
+		:target: https://travis-ci.org/steven-murray/mrpy
+.. image:: https://coveralls.io/repos/steven-murray/mrpy/badge.svg?branch=master&service=github
+        :target: https://coveralls.io/github/steven-murray/mrpy?branch=master
 
 A Python package for calculations with the MRP parameterisation of the Halo Mass Function.
 
 See Murray, Robotham, Power 2016 (in prep.) for more details on what the MRP is.
 
-.. image:: https://travis-ci.org/steven-murray/mrpy.png?branch=master
-		:target: https://travis-ci.org/steven-murray/mrpy
-.. image:: https://coveralls.io/repos/steven-murray/mrpy/badge.svg?branch=master&service=github
-        :target: https://coveralls.io/github/steven-murray/mrpy?branch=master
 
 Quick Start
 -----------
