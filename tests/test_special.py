@@ -189,3 +189,4 @@ def test_hyperReg_2F2_vec_float():
 def test_hyperReg_2F2_vec_vec():
     ans = np.array([-0.0283642,  0.99684913])
     assert np.all(np.isclose(s.hyperReg_2F2(np.array([-0.8,0.8]),np.array([0.1,0.8])),ans))
+
