@@ -42,7 +42,7 @@ extensions = [
 #    'nbsphinx'
 ]
 
-autosummary_generate = True
+autosummary_generate = "api",
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['templates']
@@ -104,7 +104,7 @@ language = None
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
-exclude_patterns = ['_build','templates','**.ipynb_checkpoints',"examples"]
+exclude_patterns = ['_build','templates','**.ipynb_checkpoints']#,"examples"]
 
 # The reST default role (used for this markup: `text`) to use for all
 # documents.
@@ -322,6 +322,7 @@ numpydoc_show_class_members=False
 #===============================================================================
 # This does something naughty. It runs the nbconvert command on everything in the
 # given folder, and moves the results to another given folder on every make.
+
 source_ipy_folder = "examples"
 output_ipy_folder = "_exampledoc"
 import shutil
@@ -340,7 +341,10 @@ def nbconvert_files(app):
     for f in files:
         os.system("jupyter nbconvert {0} --to rst".format(os.path.join(fin,f)))
         os.rename(f.replace(".ipynb",".rst"),os.path.join(fout,f.replace(".ipynb",".rst")))
-        shutil.move(f.replace(".ipynb","_files"),os.path.join(fout,f.replace(".ipynb","_files")))
+        try:
+            shutil.move(f.replace(".ipynb","_files"),os.path.join(fout,f.replace(".ipynb","_files")))
+        except IOError:
+            pass
 
 def setup(app):
     app.add_config_value("source_ipy_folder","examples","html")
