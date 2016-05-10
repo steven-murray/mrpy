@@ -21,40 +21,45 @@ alpha = -1.8
 beta = 0.7
 logHs = 14.0
 mmin = 11.0
+lnA = 0
 scale = 0
 
 # A series of trial parameters
-trials = [(logHs, alpha, beta, logHs, alpha, beta, scale),
-          (logHs, alpha, beta, logHs, alpha, beta, 1.0),
-          (logHs, alpha, beta, logHs*1.1, alpha, beta, scale),
-          (logHs, alpha, beta, logHs, alpha*1.05, beta, scale),
-          (logHs, alpha, beta, logHs, alpha, beta*1.1, scale)]
+trials = [(logHs, alpha, beta, lnA, logHs, alpha, beta,lnA),#, scale),
+          #(logHs, alpha, beta, logHs, alpha, beta),#, 1.0),
+          (logHs, alpha, beta, lnA, logHs*1.1, alpha, beta,lnA),#, scale),
+          (logHs, alpha, beta, lnA, logHs, alpha*1.05, beta,lnA),#, scale),
+          (logHs, alpha, beta, lnA, logHs, alpha, beta*1.1, lnA),
+          (logHs, alpha, beta, lnA, logHs, alpha, beta*1.1, lnA+0.5)]# scale)]
 
 
-def numerical_F(alpha, beta, logHs, scale=0, alphad=None, betad=None, logHsd=None):
+def numerical_F(alpha, beta, logHs, lnA, alphad=None, betad=None, logHsd=None,lnAd=None):
     alphad = alphad or alpha
     betad = betad or beta
     logHsd = logHsd or logHs
+    lnAd = lnAd or lnA
 
     m = np.logspace(mmin, 18, 1000)
-    mrp = PerObjLike(scale=scale, logm=np.log10(m), logHs=logHs, alpha=alpha, beta=beta)
-    mrpd = PerObjLike(scale=scale, logm=np.log10(m), logHs=logHsd, alpha=alphad, beta=betad)
-    integ = mrpd._g*(mrp._lng - np.log(mrp._q_))
-    return simps(integ, m)
+    mrp = PerObjLike(logm=np.log10(m), logHs=logHs, alpha=alpha, beta=beta, lnA=lnA)
+    mrpd = PerObjLike(logm=np.log10(m), logHs=logHsd, alpha=alphad, beta=betad,lnA = lnAd)
+    integ = mrpd._g*mrp._lng
+    return simps(integ, m) - mrp._q_
 
 
-def F_abs_ratio(logHs, alpha, beta, logHsd, alphad, betad, scale):
-    ia = IdealAnalytic(log_mmin=mmin, logHs=logHs, alpha=alpha, beta=beta, logHsd=logHsd,
-                       alphad=alphad, betad=betad, scale=scale)
-    assert np.isclose(ia._F/numerical_F(alpha, beta, logHs, scale, alphad, betad, logHsd), 1.0, rtol=1e-2)
+def F_abs_ratio(logHs, alpha, beta,lnA, logHsd, alphad, betad,lnAd):
+    ia = IdealAnalytic(log_mmin=mmin, logHs=logHs, alpha=alpha, beta=beta, lnA=lnA,logHsd=logHsd,
+                       alphad=alphad, betad=betad,lnAd=lnAd)
+    num = numerical_F(alpha, beta, logHs, alphad, betad, logHsd)
+    print ia._F, num
+    assert np.isclose(ia._F,num, rtol=1e-2)
 
 
 def test_F_abs():
     """
-    This test checks if F, defined as a numerical integral, is the same as the analytic case.
+    Test if F, defined as a numerical integral, is the same as the analytic case.
     """
-    for h, a, b, hd, ad, bd, s in trials:
-        yield F_abs_ratio, h, a, b, hd, ad, bd, s
+    for h, a, b, lnA, hd, ad, bd,lnAd in trials:
+        yield F_abs_ratio, h, a, b, lnA,hd, ad, bd,lnAd
 
 
 # --------- HELPER FUNCTIONS ----------------------------------------------------------
@@ -63,9 +68,9 @@ def ideal_numerical_jh(q, dx=1e-4, hess=False, **kwargs):
         return getattr(IdealAnalytic(**kwargs), q)
 
     if hess:
-        return numerical_hess(func, ["logHs", "alpha", 'beta'], dx, **kwargs)
+        return numerical_hess(func, ["logHs", "alpha", 'beta','lnA'], dx, **kwargs)
     else:
-        return numerical_jac(func, ["logHs", "alpha", 'beta'], dx, **kwargs)
+        return numerical_jac(func, ["logHs", "alpha", 'beta','lnA'], dx, **kwargs)
 
 
 def getq_jac(q, **kwargs):
@@ -94,10 +99,10 @@ def get_frac_q_jh(q, dx=1e-4, hess=False, **kwargs):
 
 
 # ------------ TEST BASIC FUNCTIONS -----------------------------------------------
-def runq(q, hess, logHs, alpha, beta, logHsd, alphad, betad, scale):
+def runq(q, hess, logHs, alpha, beta, lnA, logHsd, alphad, betad, lnAd):
     res = get_frac_q_jh(q, hess=hess, log_mmin=mmin, logHs=logHs,
-                        alpha=alpha, beta=beta,logHsd=logHsd,
-                        alphad=alphad, betad=betad, scale=scale)
+                        alpha=alpha,lnA=lnA, beta=beta,logHsd=logHsd,
+                        alphad=alphad, betad=betad,lnAd=lnAd)
     print res
     assert np.all(np.isclose(res,1.0, rtol=1e-2))
 
@@ -105,8 +110,8 @@ def runq(q, hess, logHs, alpha, beta, logHsd, alphad, betad, scale):
 def test_basics():
     for q in ["_lng", "_lnq", "_u"]:
         for hess in [False, True]:
-            for h, a, b, hd, ad, bd, s in trials:
-                yield runq, q, hess, h, a, b, hd, ad, bd, s
+            for h, a, b,lnA, hd, ad, bd,lnAd in trials:
+                yield runq, q, hess, h, a, b,lnA, hd, ad, bd, lnAd
 
 
 # ------------ TEST G - Q -----------------------------------------------
@@ -123,18 +128,18 @@ def get_frac_gq_jh(dx=1e-4, hess=False, **kwargs):
     return anl/num
 
 
-def rungq(hess, logHs, alpha, beta, logHsd, alphad, betad, scale):
+def rungq(hess, logHs, alpha, beta,lnA, logHsd, alphad, betad, lnAd):
     res = get_frac_gq_jh(hess=hess, log_mmin=mmin, logHs=logHs,
-                         alpha=alpha, beta=beta,logHsd=logHsd,
-                         alphad=alphad, betad=betad, scale=scale)
+                         alpha=alpha, beta=beta,lnA=lnA,logHsd=logHsd,
+                         alphad=alphad, betad=betad,lnAd=lnAd)
     print res
     assert np.all(np.isclose(res,1.0, rtol=1e-2))
 
 
 def test_gq():
     for hess in [False, True]:
-        for h, a, b, hd, ad, bd, s in trials:
-            yield rungq, hess, h, a, b, hd, ad, bd, s
+        for h, a, b, lnA,hd, ad, bd,lnAd, in trials:
+            yield rungq, hess, h, a, b,lnA, hd, ad, bd,lnAd
 
 
 # ------------ TEST G - Q - U -----------------------------------------------
@@ -156,18 +161,18 @@ def get_frac_gqu_jh(dx=1e-4, hess=False, **kwargs):
     return anl/num
 
 
-def rungqu(hess, logHs, alpha, beta, logHsd, alphad, betad, scale):
+def rungqu(hess, logHs, alpha, beta,lnA, logHsd, alphad, betad, lnAd):
     res = get_frac_gqu_jh(hess=hess, log_mmin=mmin, logHs=logHs,
-                          alpha=alpha, beta=beta,logHsd=logHsd,
-                          alphad=alphad, betad=betad, scale=scale)
+                          alpha=alpha, beta=beta,lnA=lnA,logHsd=logHsd,
+                          alphad=alphad, betad=betad, lnAd=lnAd)
     print res
     assert np.all(np.isclose(res,1.0, rtol=1e-2))
 
 
 def test_gqu():
     for hess in [False, True]:
-        for h, a, b, hd, ad, bd, s in trials:
-            yield rungqu, hess, h, a, b, hd, ad, bd, s
+        for h, a, b, lnA, hd, ad, bd,lnAd in trials:
+            yield rungqu, hess, h, a, b,lnA, hd, ad, bd,lnAd
 
 
 # ------------ TEST F -----------------------------------------------
@@ -195,20 +200,20 @@ def get_frac_F_jh(dx=1e-4, hess=False, **kwargs):
     return anl,num
 
 
-def runF(hess, logHs, alpha, beta, logHsd, alphad, betad, scale):
+def runF(hess, logHs, alpha, beta, lnA, logHsd, alphad, betad, lnAd):
     anl,num = get_frac_F_jh(hess=hess, log_mmin=mmin, logHs=logHs,
-                        alpha=alpha, beta=beta,logHsd=logHsd,
-                        alphad=alphad, betad=betad, scale=scale)
+                        alpha=alpha, beta=beta,lnA=lnA,logHsd=logHsd,
+                        alphad=alphad, betad=betad,lnAd=lnAd)
     print anl,num
     assert np.all(np.isclose(anl,num, rtol=3e-2,atol=1e-5))
 
 
 def test_nablaF():
     for hess in [False, True]:
-        for h, a, b, hd, ad, bd, s in trials:
+        for h, a, b, lnA, hd, ad, bd, lnAd in trials:
             # The following fails at the moment, so continue
             #if not hess and h==hd and a==ad and b==bd:
             #    continue
 
-            yield runF, hess, h, a, b, hd, ad, bd, s
+            yield runF, hess, h, a, b, lnA, hd, ad, bd, lnAd
 
