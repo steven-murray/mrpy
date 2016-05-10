@@ -192,22 +192,23 @@ def get_frac_F_jh(dx=1e-4, hess=False, **kwargs):
     anl = np.where(mask, 1, anl)
 
     num = np.where(mask, 1, num)
-    return anl/num
+    return anl,num
 
 
 def runF(hess, logHs, alpha, beta, logHsd, alphad, betad, scale):
-    res = get_frac_F_jh(hess=hess, log_mmin=mmin, logHs=logHs,
+    anl,num = get_frac_F_jh(hess=hess, log_mmin=mmin, logHs=logHs,
                         alpha=alpha, beta=beta,logHsd=logHsd,
                         alphad=alphad, betad=betad, scale=scale)
-    print res
-    assert np.all(np.isclose(res,1.0, rtol=3e-2))
+    print anl,num
+    assert np.all(np.isclose(anl,num, rtol=3e-2,atol=1e-5))
 
 
 def test_nablaF():
     for hess in [False, True]:
         for h, a, b, hd, ad, bd, s in trials:
             # The following fails at the moment, so continue
-            if not hess and h==hd and a==ad and b==bd:
-                continue
+            #if not hess and h==hd and a==ad and b==bd:
+            #    continue
 
             yield runF, hess, h, a, b, hd, ad, bd, s
+

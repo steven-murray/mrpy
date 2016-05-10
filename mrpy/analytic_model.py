@@ -305,6 +305,23 @@ class IdealAnalytic(lk.PerObjLike):
         return self._qd * (lngxy - lnqxy) - uxy
 
     @_cached
+    def jacobian(self):
+        A = self.V * np.exp(self.lnA) * (self._qd_nos / self._qd)
+        h = self._F_x("h")
+        a = self._F_x("a")
+        b = self._F_x("b")
+
+        if self._shape and not hasattr(A,"__len__"):
+            x = A * np.array([np.array([h[i], a[i], b[i]]
+                                       ) for i in range(len(h))]).T
+        elif self._shape and hasattr(A,"__len__"):
+            x = np.array([A[i] * np.array([h[i], a[i], b[i]]
+                                          ) for i in range(len(h))]).T
+        else:
+            x = A * np.array([h, a, b])
+        return np.squeeze(x)
+
+    @_cached
     def hessian(self):
         hh = self._F_x_y("h", "h")
         ha = self._F_x_y("h", "a")
