@@ -163,16 +163,16 @@ class ReparameterisePerObjLike(ReparameteriseMRP, lk.PerObjLike):
     @property
     def this_jacobian(self):
         """Jacobian of the reparameterisation."""
-        j = self.jacobian
+        j = self.jacobian[:3]
         return np.array([np.dot(j, self._dtheta_dp1()), np.dot(j, self._dtheta_dp2()),
-                         np.dot(j, self._dtheta_dp3())])
+                         np.dot(j, self._dtheta_dp3()),1.0])
 
     @property
     def this_hessian(self):
         """Hessian of the reparameterisation."""
         # jac and hess of lnL with MRP params
-        j = self.jacobian
-        H = self.hessian
+        j = self.jacobian[:3]
+        H = self.hessian[:3,:3]
 
         # jacs of transformation
         j1 = self._dtheta_dp1()
@@ -186,7 +186,7 @@ class ReparameterisePerObjLike(ReparameteriseMRP, lk.PerObjLike):
         h23 = np.dot(j, self._dtheta_dp2dp3()) + np.dot(j2, np.dot(H, j3))
         h33 = np.dot(j, self._dtheta_dp3dp3()) + np.dot(j3, np.dot(H, j3))
 
-        out = np.array([[h11, h12, h13], [h12, h22, h23], [h13, h23, h33]])
+        out = np.array([[h11, h12, h13,0], [h12, h22, h23,0], [h13, h23, h33,0],[0,0,0,0]])
         return out
 
     @property

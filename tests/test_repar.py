@@ -11,8 +11,8 @@ hs = 14.0
 a = -1.8
 b = 0.7
 
-mrp_po = PerObjLike(logm,hs,a,b,log_mmin=mmin, norm=1.0)
-mrp_curve = CurveLike(logm,hs,a,b,dndm = dndm,log_mmin=mmin, norm=1.0)
+mrp_po = PerObjLike(logm,hs,a,b,log_mmin=mmin, lnA=1.0)
+mrp_curve = CurveLike(logm,hs,a,b,dndm = dndm,log_mmin=mmin, lnA=1.0)
 
 class Base(object):
     cl = None
@@ -21,16 +21,16 @@ class Base(object):
     hess = None
 
     def __init__(self):
-        self.inst = self.cl(logHs=hs,alpha=a,beta=b,logm=logm,log_mmin=mmin,norm=1.0)
+        self.inst = self.cl(logHs=hs,alpha=a,beta=b,logm=logm,log_mmin=mmin,lnA=1.0)
 
     def test_lnL(self):
         assert np.all(np.isclose(mrp_po.lnL/self.inst.lnL,self.lnl))
 
     def test_jac(self):
-        assert np.all(np.isclose(self.inst.this_jacobian/mrp_po.jacobian,self.jac))
+        assert np.all(np.isclose(self.inst.this_jacobian[:3]/mrp_po.jacobian[:3],self.jac))
 
     def test_hess(self):
-        assert np.all(np.isclose(self.inst.this_hessian/mrp_po.hessian,self.hess))
+        assert np.all(np.isclose(self.inst.this_hessian[:3,:3]/mrp_po.hessian[:3,:3],self.hess))
 
 
 class TestAp1(Base):

@@ -385,7 +385,7 @@ class MRP(object):
             Whether to return the natural log of the MRP.
         """
         return dndm(self.m, self.logHs, self.alpha, self.beta, mmin=self.log_mmin,
-                   norm=self.A, log=log)
+                    norm=self.A, log=log)
 
     def ngtm(self, log=False):
         """

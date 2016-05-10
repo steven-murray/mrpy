@@ -49,7 +49,7 @@ polygamma.__doc__ = docs.format("Polygamma",_mp_pg.__doc__)
 
 
 # The following extends the mpmath meijerg function to take vector args
-_g1_ufunc = np.frompyfunc(lambda z,x: _mp_mg([[], [1, 1]], [[0, 0, z], []], x)/gammainc(z,x),2,1)
+_g1_ufunc = np.frompyfunc(lambda z,x: _mp_mg([[], [1, 1]], [[0, 0, z], []], x),2,1)
 def G1(z,x):
     r"""
     The Meijer-G function with specific arguments: ``meijerg([[], [1, 1]], [[0, 0, z], []], x)``,
@@ -65,7 +65,7 @@ def G1(z,x):
     """
     return _flt(_g1_ufunc(z,x))
 
-_g2_ufunc = np.frompyfunc(lambda z,x: _mp_mg([[], [1, 1,1]], [[0, 0,0, z], []], x)/gammainc(z,x),2,1)
+_g2_ufunc = np.frompyfunc(lambda z,x: _mp_mg([[], [1, 1,1]], [[0, 0,0, z], []], x),2,1)
 def G2(z,x):
     r"""
     The Meijer-G function with specific arguments: ``meijerg([[], [1, 1,1]], [[0, 0, 0, z], []], x)``,

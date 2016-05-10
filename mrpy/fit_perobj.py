@@ -15,7 +15,6 @@ import os
 import numpy as np
 import scipy.optimize as opt
 import likelihoods as lk
-#from likelihoods import PerObjLikeWeights
 from scipy.stats import truncnorm
 
 try:
@@ -37,12 +36,12 @@ def _retarg(ll, jac, ret_jac):
 
 
 # Define the likelihood function
-def _lnl(p, m, nm, mmin, s, hs_bounds, alpha_bounds,
-         beta_bounds, prior_func=None, prior_kwargs={},debug=0, ret_jac=False):
+def _lnl(p, m, nm, mmin, hs_bounds, alpha_bounds,
+         beta_bounds, lnA_bounds, prior_func=None, prior_kwargs={},debug=0, ret_jac=False):
     ## Note m,nm, mmin are always interpreted as being a list of arrays/scalars
 
     # Some absolute bounds
-    if p[2] < 0 or p[0] < 0:
+    if p[2] < 0 or p[0] < 0 :
         if debug > 0:
             print "OUT OF BOUNDS: ", p
         return _retarg(-np.inf, np.inf, ret_jac)
@@ -60,22 +59,30 @@ def _lnl(p, m, nm, mmin, s, hs_bounds, alpha_bounds,
         if debug:
             print "beta out of bounds: ", p
         return _retarg(-np.inf, np.inf, ret_jac)
+    if not lnA_bounds[0] <= p[3] <= lnA_bounds[1]:
+        if debug:
+            print "beta out of bounds: ", p
+        return _retarg(-np.inf, np.inf, ret_jac)
 
     # Priors
     if prior_func is None:  # default uniform prior.
-        ll, jac = 0, np.zeros(3)
+        ll, jac = 0, np.zeros(4)
     else:
         ll, jac = prior_func(p,**prior_kwargs)
 
     # Likelihood
     for mi, nmi, mmini in zip(m, nm, mmin):
-        _mod = lk.PerObjLikeWeights(weights=nmi, scale=s, logm=np.log10(mi),
-                                 log_mmin=np.log10(mmini),
-                                 logHs=p[0], alpha=p[1], beta=p[2])
-        ll += _mod.lnL
+        _mod = lk.PerObjLikeWeights(weights=nmi, logm=np.log10(mi),
+                                    log_mmin=np.log10(mmini),
+                                    logHs=p[0], alpha=p[1], beta=p[2],lnA = p[3])
+        ll += _mod.lnL + _mod._q_
 
         if ret_jac:
-            jac += _mod.jacobian
+            jac += _mod.jacobian + _mod._q_jac_
+
+    ll -= _mod._q_
+    if ret_jac:
+        jac -= _mod._q_jac_
 
     if debug > 1:
         print "pars, ll, jac: ", p, ll, jac
@@ -180,9 +187,10 @@ class PerObjFit(object):
     a ``weight_scale=1`` fit to achieve the same accuracy on parameters.
     """
 
-    def __init__(self, m, nm=None, mmin=None, weight_scale=0,
+    def __init__(self, m, nm=None, mmin=None,# weight_scale=0,
                  hs_bounds=(10, 16), alpha_bounds=(-1.99, -1.3),
-                 beta_bounds=(0.1, 2.0), prior_func=None,prior_kwargs={}):
+                 beta_bounds=(0.1, 2.0), lnA_bounds = (-40,-10),
+                 prior_func=None,prior_kwargs={}):
 
         self._determine_suite(m, nm, mmin)
 
@@ -194,9 +202,10 @@ class PerObjFit(object):
         self.hs_bounds = hs_bounds
         self.alpha_bounds = alpha_bounds
         self.beta_bounds = beta_bounds
+        self.lnA_bounds = lnA_bounds
         self.prior_func = prior_func
         self.prior_kwargs = prior_kwargs
-        self.weight_scale = weight_scale
+#        self.weight_scale = weight_scale
 
     def _determine_suite(self, m, nm, mmin):
         ## Determine whether there is a suite of simulations.
@@ -225,13 +234,14 @@ class PerObjFit(object):
             else:
                 self.mmin = mmin
 
-    def run_downhill(self, hs0=14.5, alpha0=-1.9, beta0=0.8, debug=0, jac=True, **minimize_kw):
+    def run_downhill(self, hs0=14.5, alpha0=-1.9, beta0=0.8, lnA0=-26.0,
+                     debug=0, jac=True, **minimize_kw):
         """
         Downhill-gradient optimization.
 
         Parameters
         ----------
-        hs0, alpha0, beta0: float, optional
+        hs0, alpha0, beta0, lnA0: float, optional
             Initial guess for each of the MRP parameters.
 
         debug : int, optional
@@ -285,16 +295,17 @@ class PerObjFit(object):
         >>> plot(FitObj.downhill_obj.logm,FitObj.downhill_obj.dndm(log=True))
         >>> print obj.stats.mean, r.mean()
         """
-        p0 = [hs0, alpha0, beta0]
-        bounds = [self.hs_bounds, self.alpha_bounds, self.beta_bounds]
-        self.downhill_res = opt.minimize(_objfunc, p0, args=(self.m, self.nm, self.mmin, self.weight_scale, (0, np.inf),
-                                                         (-np.inf, np.inf), (0, np.inf), self.prior_func,self.prior_kwargs,
-                                                         debug, jac),
-                                     bounds=bounds, jac=jac, **minimize_kw)
+        p0 = [hs0, alpha0, beta0,lnA0]
+        bounds = [self.hs_bounds, self.alpha_bounds, self.beta_bounds,self.lnA_bounds]
+        self.downhill_res = opt.minimize(_objfunc, p0, args=(self.m, self.nm, self.mmin, (0, np.inf),
+                                                             (-np.inf, np.inf), (0, np.inf), (-np.inf,np.inf),
+                                                             self.prior_func,self.prior_kwargs,
+                                                             debug, jac),
+                                         bounds=bounds, jac=jac, **minimize_kw)
 
-        self.downhill_obj = [lk.PerObjLikeWeights(scale=self.weight_scale, logm=np.log10(mi), weights=nmi,
+        self.downhill_obj = [lk.PerObjLikeWeights(logm=np.log10(mi), weights=nmi,
                                                logHs=self.downhill_res.x[0], alpha=self.downhill_res.x[1],
-                                               beta=self.downhill_res.x[2],
+                                               beta=self.downhill_res.x[2], lnA = self.downhill_res.x[3],
                                                log_mmin=np.log10(mmini)) for mi, nmi, mmini in
                              zip(self.m, self.nm, self.mmin)]
 
@@ -308,8 +319,8 @@ class PerObjFit(object):
 
     def _get_initial_ball(self, guess, chains):
         s = 0.05
-        a = np.array([self.hs_bounds[0], self.alpha_bounds[0], self.beta_bounds[0]])
-        b = np.array([self.hs_bounds[1], self.alpha_bounds[1], self.beta_bounds[1]])
+        a = np.array([self.hs_bounds[0], self.alpha_bounds[0], self.beta_bounds[0], self.lnA_bounds[0]])
+        b = np.array([self.hs_bounds[1], self.alpha_bounds[1], self.beta_bounds[1], self.lnA_bounds[1]])
 
         a = self._get_cuts(a, guess, np.abs(s*guess))
         b = self._get_cuts(b, guess, np.abs(s*guess))
@@ -320,7 +331,7 @@ class PerObjFit(object):
         return stacked_val
 
     def run_mcmc(self, nchains=50, warmup=1000, iterations=1000,
-                 hs0=14.5, alpha0=-1.9, beta0=0.8, debug=0,
+                 hs0=14.5, alpha0=-1.9, beta0=0.8, lnA0=-26.0, debug=0,
                  opt_init=False, opt_kw={}, **kwargs):
         """
         Per-object MCMC fit for masses `m`, using the `emcee` package.
@@ -380,10 +391,10 @@ class PerObjFit(object):
         >>> print mcmc_res.flatchain.mean(axis=0)
         """
         # First, set guess, either by optimization or passed values
-        guess = np.array([hs0, alpha0, beta0])
+        guess = np.array([hs0, alpha0, beta0, lnA0])
         if opt_init:
             if not hasattr(self, "downhill_res"):
-                self.run_downhill(hs0, alpha0, beta0, debug, **opt_kw)
+                self.run_downhill(hs0, alpha0, beta0, lnA0, debug, **opt_kw)
             res = self.downhill_res
 
             if res.success:
@@ -396,8 +407,9 @@ class PerObjFit(object):
         initial = self._get_initial_ball(guess, nchains)
 
         self.mcmc_res = emcee.EnsembleSampler(nchains, initial.shape[1], _lnl,
-                                              args=(self.m, self.nm, self.mmin, self.weight_scale, self.hs_bounds,
-                                                    self.alpha_bounds, self.beta_bounds, self.prior_func, self.prior_kwargs,
+                                              args=(self.m, self.nm, self.mmin, self.hs_bounds,
+                                                    self.alpha_bounds, self.beta_bounds, self.lnA_bounds,
+                                                    self.prior_func, self.prior_kwargs,
                                                     debug, False), **kwargs)
 
         if warmup:
@@ -434,8 +446,8 @@ class PerObjFit(object):
             Returned only if `ret_jac` is `True`. The jacobian at the current parameter vector.
 
         """
-        return _lnl(p, self.m, self.nm, self.mmin, self.weight_scale, self.hs_bounds,
-                    self.alpha_bounds, self.beta_bounds, self.prior_func,
+        return _lnl(p, self.m, self.nm, self.mmin, self.hs_bounds,
+                    self.alpha_bounds, self.beta_bounds, self.lnA_bounds, self.prior_func,
                     debug, ret_jac)
 
 # =========================================================================================
