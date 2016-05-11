@@ -54,7 +54,7 @@ class IdealAnalytic(lk.PerObjLike):
         self.logHsd = logHsd or self.logHs
         self.alphad = alphad or self.alpha
         self.betad = betad or self.beta
-        self.lnAd = lnAd or self.lnA
+        self.lnAd = self.lnA if lnAd is None else lnAd
         
         self._shape = [getattr(getattr(self, q), "__len__", None) for q in ["mmin", "logHs", "alpha", "beta"]]
         while None in self._shape:
@@ -63,6 +63,10 @@ class IdealAnalytic(lk.PerObjLike):
     @_cached
     def Hsd(self):
         return 10**self.logHsd
+
+    @_cached
+    def Ad(self):
+        return np.exp(self.lnAd)
 
     # ===========================================================================
     # Basic Unit Quantities
@@ -100,19 +104,19 @@ class IdealAnalytic(lk.PerObjLike):
 
     @_cached
     def G1d(self):
-        return sp.G1(self._zd,self._xd)
+        return self.Ad * self.Hsd * sp.G1(self._zd,self._xd)
 
     @_cached
     def G1d_p1(self):
-        return sp.G1(self._zd+self.beta/self.betad, self._xd)
+        return self.Ad * self.Hsd * sp.G1(self._zd+self.beta/self.betad, self._xd)
 
     @_cached
     def G2d(self):
-        return sp.G2(self._zd, self._xd)
+        return self.Ad * self.Hsd * sp.G2(self._zd, self._xd)
 
     @_cached
     def G2d_p1(self):
-        return sp.G2(self._zd+self.beta/self.betad,self._xd)
+        return self.Ad * self.Hsd * sp.G2(self._zd+self.beta/self.betad,self._xd)
 
     @_cached
     def _Gbard(self):
@@ -124,7 +128,7 @@ class IdealAnalytic(lk.PerObjLike):
 
     @_cached
     def _phid(self):
-        return self._yd*self._gd/self.gammainc_zxd
+        return self.mmin * self._gd
 
     # ===========================================================================
     # Basic MRP quantities
@@ -134,14 +138,14 @@ class IdealAnalytic(lk.PerObjLike):
         """
         The shape of the MRP, completely unnormalised (ie. A=1) (truncation mass)
         """
-        return core.dndm(self.mmin, self.logHsd, self.alphad, self.betad,norm=np.exp(self.lnAd))
+        return core.dndm(self.mmin, self.logHsd, self.alphad, self.betad,norm=self.Ad)
 
     @_cached
     def _qd(self):
         """
         The normalisation of the MRP (ie. integral of g) (truncation masses)
         """
-        return sp.gammainc(self._zd, self._xd)*self.Hsd * np.exp(self.lnAd)
+        return sp.gammainc(self._zd, self._xd)*self.Hsd * self.Ad
     #
     # @_cached
     # def _qd_nos(self):
@@ -173,7 +177,7 @@ class IdealAnalytic(lk.PerObjLike):
     @_cached
     def _u(self):
         a = (self.Hsd / self.Hs) ** self.beta
-        b = np.exp(self.lnAd)*self.Hsd * self.gammainc_z1xd
+        b = self.Ad*self.Hsd * self.gammainc_z1xd
         c = self._xd ** (self.beta / self.betad) * self._qd
         return a * (b - c)
 
@@ -235,11 +239,14 @@ class IdealAnalytic(lk.PerObjLike):
 
     @_cached
     def _u_b(self):
-        a = np.log(self.Hsd / self.Hs) * self._u
-        b = (self.Hsd / self.Hs) ** self.beta
-        c = self._u * np.log(self._xd)/b
-        d = self.Hsd * self.gammainc_z1xd * self.G1d_p1
-        return a + b * ((1.0 / self.betad) * (c + d))
+        a = self._u * (np.log(self.Hsd/self.Hs) + np.log(self._xd)/self.betad)
+        b = (self.Hsd/self.Hs)**self.beta * self.G1d_p1/self.betad
+        return a+b
+        # a = np.log(self.Hsd / self.Hs) * self._u
+        # b = (self.Hsd / self.Hs) ** self.beta
+        # c = self._u * np.log(self._xd)/b
+        # d = np.exp(self.lnAd) * self.Hsd * self.gammainc_z1xd * self.G1d_p1
+        # return a + b * ((1.0 / self.betad) * (c + d))
 
     @_cached
     def _u_h_b(self):
@@ -247,13 +254,22 @@ class IdealAnalytic(lk.PerObjLike):
 
     @_cached
     def _u_b_b(self):
-        hfrac = self.Hsd/self.Hs
-        a = 1/self.betad
-        b = self._u_b*(self.betad*np.log(hfrac) + np.log(self._xd))
-        c = np.log(hfrac) * self.Hsd * self.G1d_p1 * self.gammainc_z1xd * hfrac**self.beta
-        d = self.Hsd * hfrac**self.beta * self.gammainc_z1xd * self._Gbard_p1/self.betad
+        hf = self.Hsd/self.Hs
+        hfb = hf**self.beta
 
-        return a*(b+c+d)
+        # a = self._u_b*(np.log(hf) + np.log(self._xd)/self.betad)
+        # b = np.log(hf) * hfb * self.G1d_p1/self.betad
+        # c =
+        a = np.log(hf) + np.log(self._xd)/self.betad
+        b = self._u_b + hfb * self.G1d_p1/self.betad
+        c = 2*hfb*self.G2d_p1/self.betad**2
+        return a*b + c
+        # a = 1/self.betad
+        # b = self._u_b*(self.betad*np.log(hfrac) + np.log(self._xd))
+        # c = np.log(hfrac) * self.Hsd * self.G1d_p1 * self.gammainc_z1xd * hfrac**self.beta
+        # d = self.Hsd * hfrac**self.beta * self.gammainc_z1xd * self._Gbard_p1/self.betad
+        #
+        # return a*(b+c+d)
 
 
     #---------------t'() --------------------------------------------
