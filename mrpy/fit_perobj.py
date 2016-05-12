@@ -49,7 +49,7 @@ def _lnl(p, m, nm, mmin, V,  bounds, prior_func=None, prior_kwargs={},debug=0, r
     for i in range(len(p)):
         if not bounds[i][0] <= p[i] <= bounds[i][1]:
             if debug > 0:
-                print "parameer out of bounds: ", p, bounds
+                print "parameter out of bounds: ", p, bounds
             return _retarg(-np.inf, np.inf, ret_jac)
 
     # Priors
@@ -62,9 +62,8 @@ def _lnl(p, m, nm, mmin, V,  bounds, prior_func=None, prior_kwargs={},debug=0, r
     for mi, nmi, mmini,Vi in zip(m, nm, mmin,V):
         _mod = lk.PerObjLikeWeights(weights=nmi, logm=np.log10(mi),
                                     log_mmin=np.log10(mmini),
-                                    logHs=p[0], alpha=p[1], beta=p[2],lnA = p[3] + np.log(Vi/V[0]))
+                                    logHs=p[0], alpha=p[1], beta=p[2],lnA = p[3] + np.log(Vi))
         ll += _mod.lnL
-
         if ret_jac:
             jac += _mod.jacobian
 
@@ -227,31 +226,7 @@ class PerObjFit(object):
             else:
                 self.V = V
 
-    # def _get_guess(self,hs0,alpha0,beta0,lnA0):
-    #     """
-    #     Return the initial guess, taking into account all needed guesses of lnA.
-    #     """
-    #     p0 = [hs0, alpha0, beta0,lnA0]
-    #
-    #     # If there are multiple datasets, add more lnA parameters
-    #     for i,n in enumerate(self.nm):
-    #         if i==0:
-    #             tot = np.sum(n)
-    #         else:
-    #             p0.append(lnA0 + np.log(np.sum(n)) - np.log(tot))
-    #     return p0
-    #
-    # def _get_bounds(self,p0):
-    #     bounds = [self.hs_bounds, self.alpha_bounds, self.beta_bounds,self.lnA_bounds]
-    #
-    #     # Add more bounds corresponding to extra datasets
-    #     if len(p0)>4:
-    #         for p in p0[4:]:
-    #             bounds.append((p - (p0[3] - self.lnA_bounds[0]),p - (p0[3] - self.lnA_bounds[1])))
-    #
-    #     return bounds
-
-    def run_downhill(self, hs0=14.5, alpha0=-1.9, beta0=0.8, lnA0=-26.0,
+    def run_downhill(self, hs0=14.5, alpha0=-1.9, beta0=0.8, lnA0=-40.0,
                      debug=0, jac=True, **minimize_kw):
         """
         Downhill-gradient optimization.
