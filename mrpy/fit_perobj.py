@@ -620,6 +620,7 @@ def _compile_model(per_object_errors=False):
 
 def _stan_cache(model_code, model_name=None):
     code_hash = hashlib.md5(model_code.encode('ascii')).hexdigest()
+    ver = pystan.__version__
 
     # Find the mrpy project dir
     dir = path.join(path.expanduser("~"), '.mrpy')
@@ -627,9 +628,9 @@ def _stan_cache(model_code, model_name=None):
         os.makedirs(dir)
 
     if model_name is None:
-        cache_fn = 'cached-model-{}.pkl'.format(code_hash)
+        cache_fn = 'cached-model-{}-{}.pkl'.format(code_hash,ver)
     else:
-        cache_fn = 'cached-{}-{}.pkl'.format(model_name, code_hash)
+        cache_fn = 'cached-{}-{}-{}.pkl'.format(model_name, code_hash,ver)
 
     try:
         sm = pickle.load(open(path.join(dir, cache_fn), 'rb'))
