@@ -11,7 +11,7 @@ functions or other data.
 import numpy as np
 import special as sp
 import stats
-from cached_property import cached_property as _cached
+#from cached_property import cached_property as _cached
 
 
 def entire_integral(logHs, alpha, beta, s=1):
@@ -289,8 +289,8 @@ class MRP(object):
 
     logHs, alpha, beta : array_like
         The shape parameters of the MRP.
-
     norm : float or string
+
         Gives the normalisation of the MRP, *lnA*. If set to a *float*, it
         is directly the (log) normalisation. If set to ``"pdf"``, it will automatically
         render the MRP as a statistical distribution. If set to ``"rhoc"``, it will
@@ -416,19 +416,19 @@ class MRP(object):
     # Derived Scalar Quantities
     # =============================================================================
     @property
-    def log_mass_mode(self):
-        """
-        The mode of the log-space MRP weighted by mass
-        """
-        return log_mass_mode(self.logHs, self.alpha, self.beta)
-
-    @_cached
     def _k(self):
         """
         The integral of the mass-weighted MRP down to ``m=0`` (i.e. disregarding
         the truncation mass).
         """
         return entire_integral(self.logHs, self.alpha, self.beta)
+
+    @property
+    def log_mass_mode(self):
+        """
+        The mode of the log-space MRP weighted by mass
+        """
+        return log_mass_mode(self.logHs, self.alpha, self.beta)
 
 
     @property
