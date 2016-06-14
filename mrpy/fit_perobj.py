@@ -508,7 +508,7 @@ functions {
     * @param real alpha, power-law slope
     * @param real beta, cut-off parameter
     */
-    real truncated_logGGD_log(vector y, real ymin, real alpha, real beta){
+    real truncated_logGGD_log(vector y, real ymin, real h, real alpha, real beta, real lnA){
         vector[num_elements(y)] x;
         real xmin;
         real z;
@@ -516,7 +516,7 @@ functions {
         z <- (alpha+1)/beta;
         x <- exp(log10()*y*beta);
         xmin <- exp(log10()*ymin*beta);
-        return sum(log(beta) + log(log10()) + log10()*y*(alpha+1) - x - log(gammainc(z,xmin)));
+        return sum(lnA + log(beta) + log(log10()) + h + log10()*y*(alpha+1) - x) - exp(lnA)*pow(10,h)*gammainc(z,xmin);
     }
 }
 """
@@ -526,6 +526,7 @@ data {
     int<lower=0> N;                // number of halos
     vector<lower=0>[N] log_m_meas; // measured halo masses
     vector<lower=0>[N] sd_dex;     // uncertainty in halo masses (dex)
+    real<lower=0> V;               // Volume of the survey
 
     // CONTROLS FOR PARAMETER BOUNDS
     real<lower=0> hs_min;             // Lower bound of logHs
@@ -537,6 +538,8 @@ data {
     real<lower=0> mmin_min;           // Lower bound of log_mmin
     real<lower=0> mmin_max;           // Upper bound of log_mmin
     real<lower=0,upper=20>mtrue_max;  // Upper bound of true masses
+    real  lnA_min;                    // lower bound of lnA
+    real  lnA_max;                    // upper bound of lnA
 }
 """
 
@@ -544,6 +547,7 @@ _simple_data = """
 data {
     int<lower=0> N;                // number of halos
     vector<lower=0>[N] log_m;      // measured halo masses
+    real<lower=0> V;               // Volume of the survey
 
     // CONTROLS FOR PARAMETER BOUNDS
     real<lower=0> hs_min;             // Lower bound of logHs
@@ -552,7 +556,10 @@ data {
     real<lower=-2,upper=0> alpha_max; // Upper bound of alpha
     real<lower=0> beta_min;           // Lower bound of beta
     real<lower=0> beta_max;           // Upper bound of beta
+    real  lnA_min;                    // lower bound of lnA
+    real  lnA_max;                    // upper bound of lnA
 }
+
 transformed data {
     real<lower=0> log_mmin;
     log_mmin <- min(log_m);
@@ -564,8 +571,14 @@ parameters {
     real<lower=hs_min,upper=hs_max> logHs;               // Characteristic halo mass
     real<lower=alpha_min,upper=alpha_max> alpha;         // Power-law slope
     real<lower=beta_min,upper=beta_max> beta;            // Cut-off parameter
+    real<lower=lnA_min,upper=lnA_max> lnA;               // Normalisation
     real<lower=mmin_min,upper=mmin_max> log_mmin;        // Truncation mass
     vector<lower=log_mmin,upper=mtrue_max>[N] log_mtrue; // True mass estimates
+}
+
+transformed parameters {
+    real raw_lnA;
+    raw_lnA <- lnA + log(V);
 }
 """
 
@@ -574,7 +587,14 @@ parameters {
     real<lower=hs_min,upper=hs_max> logHs;               // Characteristic halo mass
     real<lower=alpha_min,upper=alpha_max> alpha;         // Power-law slope
     real<lower=beta_min,upper=beta_max> beta;            // Cut-off parameter
+    real<lower=lnA_min,upper=lnA_max> lnA;               // Normalisation
 }
+
+transformed parameters {
+    real raw_lnA;
+    raw_lnA <- lnA + log(V);
+}
+
 """
 
 _with_errors_model = """
@@ -584,7 +604,7 @@ model {
     y <- log_mtrue-logHs;
     ymin <- log_mmin-logHs;
 
-    y ~ truncated_logGGD(ymin, alpha, beta);
+    y ~ truncated_logGGD(ymin, logHs, alpha, beta, raw_lnA);
     log_mtrue ~ normal(log_m_meas,sd_dex);
 }
 """
@@ -596,7 +616,7 @@ model {
     y <- log_m-logHs;
     ymin <- log_mmin-logHs;
 
-    y ~ truncated_logGGD(ymin, alpha, beta);
+    y ~ truncated_logGGD(ymin, logHs, alpha, beta, raw_lnA);
 }
 """
 
@@ -644,9 +664,10 @@ def _stan_cache(model_code, model_name=None):
     return sm
 
 
-def fit_perobj_stan(m, sd_dex=None, warmup=None, iter=1000,
+def fit_perobj_stan(logm, V=1,sd_dex=None, warmup=None, iter=1000,
                     hs_bounds=(12, 16), alpha_bounds=(-1.99, -1.3),
-                    beta_bounds=(0.3, 2.0), mmin_bounds=None, opt=False,
+                    beta_bounds=(0.3, 2.0), mmin_bounds=None,
+                    lnA_bounds=(-40,0),opt=False,
                     mtrue_max=16.0, model=None, **kwargs):
     """
     Fit the MRP to individual halo masses using the Stan programming language.
@@ -657,8 +678,8 @@ def fit_perobj_stan(m, sd_dex=None, warmup=None, iter=1000,
 
     Parameters
     ----------
-    m : array_like
-        The masses (or variates).
+    logm : array_like
+        The log10-masses (or variates).
 
     sd_dex : array_like
         Either a scalar giving the same lognormal uncertainty for each variate, or
@@ -695,14 +716,17 @@ def fit_perobj_stan(m, sd_dex=None, warmup=None, iter=1000,
         
     """
     if sd_dex is None:
-        stan_data = {"N": len(m),
-                     "log_m": np.log10(m),
+        stan_data = {"N": len(logm),
+                     "V":V,
+                     "log_m": logm,
                      "hs_min": hs_bounds[0],
                      "hs_max": hs_bounds[1],
                      "alpha_min": alpha_bounds[0],
                      "alpha_max": alpha_bounds[1],
                      "beta_min": beta_bounds[0],
-                     "beta_max": beta_bounds[1]}
+                     "beta_max": beta_bounds[1],
+                     "lnA_min":lnA_bounds[0],
+                     "lnA_max":lnA_bounds[1]}
     else:
         if np.isscalar(sd_dex):
             sd_dex = np.repeat(sd_dex, len(m))
@@ -710,8 +734,9 @@ def fit_perobj_stan(m, sd_dex=None, warmup=None, iter=1000,
         if mmin_bounds is None:
             mmin_bounds = (np.log10(m.min()) - 1, np.log10(m.min()) + 1)
 
-        stan_data = {"N": len(m),
-                     "log_m_meas": np.log10(m),
+        stan_data = {"N": len(logm),
+                     "V":V,
+                     "log_m_meas": logm,
                      "sd_dex": sd_dex,
                      "hs_min": hs_bounds[0],
                      "hs_max": hs_bounds[1],
@@ -721,7 +746,9 @@ def fit_perobj_stan(m, sd_dex=None, warmup=None, iter=1000,
                      "beta_max": beta_bounds[1],
                      "mmin_min": mmin_bounds[0],
                      "mmin_max": mmin_bounds[1],
-                     "mtrue_max": mtrue_max}
+                     "mtrue_max": mtrue_max,
+                     "lnA_min":lnA_bounds[0],
+                     "lnA_max":lnA_bounds[1]}
 
     if model is None:
         model = _compile_model(False if sd_dex is None else True)
