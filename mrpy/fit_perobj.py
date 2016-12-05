@@ -16,6 +16,9 @@ import numpy as np
 import scipy.optimize as opt
 import likelihoods as lk
 from scipy.stats import truncnorm
+from itertools import product
+from mrpy.special import gammainc
+
 
 try:
     import emcee
@@ -74,6 +77,172 @@ def _lnl(p, m, nm, mmin, V,  bounds, prior_func=None, prior_kwargs={},debug=0, r
         return _retarg(-np.inf, jac, ret_jac)
     else:
         return _retarg(ll, jac, ret_jac)
+
+
+def _lnl_with_uncertainty__(p, m_obs, nm, sd_dex, V,  bounds, prior_func=None, prior_kwargs={},debug=0):
+    ## Note m,nm, sd_dex, mmin are always interpreted as being a list of arrays/scalars
+    ## mtrue here is actually mtrue - mmin.
+
+    theta = p[:5]  #hs, alpha, beta, lnA, log_mmin
+
+    ## Re-sort the m_est parameters into lists like m_obs.
+    a = len(theta)
+    m_est = []
+    for i,mi in enumerate(m_obs):
+        b = len(mi)
+        m_est += [p[a:a+b]]
+        a += b
+
+    # Some absolute bounds
+    if theta[2] < 0 or theta[0] < 0:
+        if debug > 0:
+            print "OUT OF BOUNDS: ", p
+        return -np.inf
+
+    for mesti in m_est:
+        if np.any(mesti<0):
+            return -np.inf
+
+    # Enforced bounds
+    for i in range(len(theta)):
+        if not bounds[i][0] <= theta[i] <= bounds[i][1]:
+            if debug > 0:
+                print "parameter out of bounds: ", theta, bounds
+            return -np.inf
+
+    # theta priors
+    if prior_func is None:  # default uniform prior.
+        ll = 0
+    else:
+        ll, _ = prior_func(theta,**prior_kwargs)
+
+    # Likelihood
+    for m_esti, m_obsi, sdi, nmi, Vi in zip(m_est,m_obs, sd_dex,nm, V):
+        mmini = theta[4]
+        m_esti += mmini
+        _mod = lk.PerObjLikeWeights(weights=nmi, logm=m_esti,
+                                    log_mmin=mmini,
+                                    logHs=p[0], alpha=p[1], beta=p[2],lnA = p[3] + np.log(Vi))
+        # model likelihood
+        ll += _mod.lnL + np.sum(m_esti*np.log(10) + np.log(np.log(10)))  ## Last bit converts to dn/dlog10m
+
+        # uncertainties
+        ll -= np.sum(nmi*(m_esti - m_obsi)**2/(2*sdi**2))
+
+    if debug > 1:
+        print "pars, ll: ", theta, ll
+
+    if np.isnan(ll):
+        return -np.inf
+    else:
+        return ll
+
+def _lnl_with_uncertainty(p, m_obs, nm, sd_dex, V,  bounds, prior_func=None, prior_kwargs={},debug=0):
+    ## Note m,nm, sd_dex, mmin are always interpreted as being a list of arrays/scalars
+    ## mtrue here is actually mtrue - mmin.
+
+    theta = p[:4]  #hs, alpha, beta, log_mmin
+    m_est = p[4:] + theta[3]
+
+    # Some absolute bounds
+    if theta[2] < 0:
+        if debug > 0:
+            print "OUT OF BOUNDS: ", p
+        return -np.inf
+
+    if np.any(m_est<theta[3]):
+        return -np.inf
+
+    # Enforced bounds
+    for i in range(len(theta)):
+        if not bounds[i][0] <= theta[i] <= bounds[i][1]:
+            if debug > 0:
+                print "parameter out of bounds: ", theta, bounds
+            return -np.inf
+
+    # theta priors
+    if prior_func is None:  # default uniform prior.
+        ll = 0
+    else:
+        ll, _ = prior_func(theta,**prior_kwargs)
+
+    # Likelihood
+    gzx = gammainc((theta[1]+1)/theta[2],np.exp(np.log(10)*(theta[3]-theta[0])*theta[2]))
+    raw_lnA = np.log(len(m_obs)) - np.log(10)*theta[0] - np.log(gzx)
+    #lnA = raw_lnA - np.log(V)
+    #y = m_est - theta[0]
+    #x = np.exp(np.log(10)*y*theta[2])
+
+    _mod = lk.PerObjLikeWeights(weights=np.ones_like(m_obs), logm=m_est,
+                                log_mmin=theta[3],
+                                logHs=p[0], alpha=p[1], beta=p[2], lnA=raw_lnA)
+    # model likelihood
+    ll += _mod.lnL + np.sum(m_est*np.log(10) + np.log(np.log(10)))  ## Last bit converts to dn/dlog10m
+
+    #ll += np.sum(raw_lnA + np.log(theta[2]) + np.log(np.log(10)) + np.log(10)*theta[0] + np.log(10)*y*(theta[1] + 1) - x) - np.exp(raw_lnA)*10**theta[0]*gzx
+    if debug > 0:
+        print "raw GGD ll: ", ll, raw_lnA, gzx
+        # # model likelihood
+        # ll += _mod.lnL + np.sum(m_esti*np.log(10) + np.log(np.log(10)))  ## Last bit converts to dn/dlog10m
+
+    # uncertainties
+    ll -= np.sum((m_est - m_obs)**2/(2*sd_dex**2))
+    if debug:
+        print "mass mvmt ll: ", -np.sum((m_est - m_obs)**2/(2*sd_dex**2))
+    if debug > 1:
+        print "pars, ll: ", theta, ll
+
+    if np.isnan(ll):
+        return -np.inf
+    else:
+        return ll
+
+def _lnl_with_uncertainty_poly(p, m_obs, nm, sd_dex, MS, V,  bounds, prior_func=None, prior_kwargs={},debug=0):
+    ## Note m,nm, sd_dex, mmin are always interpreted as being a list of arrays/scalars
+
+    theta = p[:4]  #hs, alpha, beta, lnA
+
+    polynodes = p[4:]
+
+    # Some absolute bounds
+    if theta[2] < 0 or theta[0] < 0:
+        if debug > 0:
+            print "OUT OF BOUNDS: ", p
+        return -np.inf
+
+    # Enforced bounds
+    for i in range(len(theta)):
+        if not bounds[i][0] <= theta[i] <= bounds[i][1]:
+            if debug > 0:
+                print "parameter out of bounds: ", theta, bounds
+            return -np.inf
+
+    # theta priors
+    if prior_func is None:  # default uniform prior.
+        ll = 0
+    else:
+        ll, _ = prior_func(theta,**prior_kwargs)
+
+    # Likelihood
+    for ms, m_obsi, sdi, nmi, Vi in zip(MS,m_obs, sd_dex,nm, V):
+        m_esti = m_obsi + np.dot(polynodes,ms)
+        mmini = m_esti.min()
+        _mod = lk.PerObjLikeWeights(weights=nmi, logm=m_esti,
+                                    log_mmin=mmini,
+                                    logHs=p[0], alpha=p[1], beta=p[2],lnA = p[3] + np.log(Vi))
+        # model likelihood
+        ll += _mod.lnL + np.sum(m_esti*np.log(10) + np.log(10))  ## Last bit converts to dn/dlog10m
+        print ll
+        # uncertainties
+        ll -= np.sum(nmi*(m_esti - m_obsi)**2/(2*sdi**2))
+        print np.sum(nmi*(m_esti - m_obsi)**2/(2*sdi**2))
+    if debug > 1:
+        print "pars, ll: ", theta, ll
+
+    if np.isnan(ll):
+        return -np.inf
+    else:
+        return ll
 
 
 def _objfunc(*args):
@@ -170,12 +339,13 @@ class PerObjFit(object):
     a ``weight_scale=1`` fit to achieve the same accuracy on parameters.
     """
 
-    def __init__(self, m, nm=None, mmin=None,V=1.0,
+    def __init__(self, m, nm=None, mmin=None,sd_dex=None,V=1.0,
                  hs_bounds=(10, 16), alpha_bounds=(-1.99, -1.3),
                  beta_bounds=(0.1, 2.0), lnA_bounds = (-40,-10),
+                 n_mnodes=None,n_snodes=None,
                  prior_func=None,prior_kwargs={}):
 
-        self._determine_suite(m, nm, mmin,V)
+        self._determine_suite(m, nm, mmin,sd_dex,V)
 
         # Make sure all masses are above mmin
         for i, (m, mmin) in enumerate(zip(self.m, self.mmin)):
@@ -189,11 +359,26 @@ class PerObjFit(object):
         self.prior_func = prior_func
         self.prior_kwargs = prior_kwargs
 #        self.weight_scale = weight_scale
+        self.n_snodes = n_snodes
+        self.n_mnodes = n_mnodes
 
-    def _determine_suite(self, m, nm, mmin,V):
+
+        if n_mnodes is None and n_snodes is not None:
+            self.n_mnodes = 1
+        elif n_snodes is None and n_mnodes is not None:
+            self.n_snodes = 1
+
+        if n_mnodes is not None:
+            smax = max([s.max() for s in self.sd_dex])
+            self.MS = [np.array([(m-min(self.log_mmin))**i*(smax-s)**j
+                            for i,j in product(range(self.n_mnodes),range(self.n_snodes))])
+                  for m,s in zip(self.logm,self.sd_dex)]
+
+    def _determine_suite(self, m, nm, mmin,sd_dex,V):
         ## Determine whether there is a suite of simulations.
         if np.isscalar(m[0]):
             self.m = [m]
+            self.logm = [np.log10(m)]
 
             if nm is None:
                 self.nm = [np.ones_like(m)]
@@ -205,10 +390,19 @@ class PerObjFit(object):
             else:
                 self.mmin = [mmin]
 
+            self.log_mmin = [np.log10(self.mmin[0])]
+
+            if sd_dex is None:
+                self.sd_dex = None
+            else:
+                assert len(sd_dex) == len(m)
+                self.sd_dex = [sd_dex]
+
             self.V = np.array([V]).flatten()
 
         else:
             self.m = m
+            self.logm = [np.log10(x) for x in self.m ]
 
             if nm is None:
                 self.nm = [np.ones_like(x) for x in m]
@@ -219,6 +413,14 @@ class PerObjFit(object):
                 self.mmin = [x.min() for x in m]
             else:
                 self.mmin = mmin
+
+            self.log_mmin = [np.log10(x.min()) for x in self.mmin]
+
+            if sd_dex  is None:
+                self.sd_dex = None
+            else:
+                assert len(sd_dex) == len(m)
+                self.sd_dex = sd_dex
 
             if np.isscalar(V):
                 print "WARNING: V is a scalar, but there are multiple datasets"
@@ -287,6 +489,9 @@ class PerObjFit(object):
         >>> plot(FitObj.downhill_obj.logm,FitObj.downhill_obj.dndm(log=True))
         >>> print obj.stats.mean, r.mean()
         """
+        if self.sd_dex is not None:
+            raise NotImplementedError("Running downhill-gradient methods with mass uncertainties is not yet implemented.")
+
         p0 =[hs0, alpha0, beta0,lnA0]
         bounds = [self.hs_bounds, self.alpha_bounds, self.beta_bounds,self.lnA_bounds]
 
@@ -311,20 +516,27 @@ class PerObjFit(object):
 
     def _get_initial_ball(self, guess, bounds, chains):
         s = 0.05
-        a = np.array([c[0] for c in bounds])
-        b = np.array([c[1] for c in bounds])
+        if bounds is not None:
+            a = np.array([c[0] for c in bounds])
+            b = np.array([c[1] for c in bounds])
 
-        a = self._get_cuts(a, guess, np.abs(s*guess))
-        b = self._get_cuts(b, guess, np.abs(s*guess))
+            aa = self._get_cuts(a, guess, np.abs(s*(b-a)))
+            bb = self._get_cuts(b, guess, np.abs(s*(b-a)))
+        else:
+            aa = [-np.inf]*len(guess)
+            bb = [np.inf]*len(guess)
+
         stacked_val = np.empty((chains, len(guess)))
-        for i, (g, A, B) in enumerate(zip(guess, a, b)):
-            stacked_val[:, i] = truncnorm(A, B, loc=g, scale=np.abs(s*g)).rvs(chains)
+
+        for i, (g, A, B) in enumerate(zip(guess, aa, bb)):
+            stacked_val[:, i] = truncnorm(A, B, loc=g, scale=np.abs(s*(b[i]-a[i]))).rvs(chains)
 
         return stacked_val
 
     def run_mcmc(self, nchains=50, warmup=1000, iterations=1000,
-                 hs0=14.5, alpha0=-1.9, beta0=0.8, lnA0=-26.0, debug=0,
-                 opt_init=False, opt_kw={}, **kwargs):
+                 hs0=14.5, alpha0=-1.9, beta0=0.8, lnA0=-26.0, logm0 = None, debug=0,
+                 opt_init=False, opt_kw={}, chainfile="chain.dat", save_latent = True,
+                 **kwargs):
         """
         Per-object MCMC fit for masses `m`, using the `emcee` package.
 
@@ -383,10 +595,13 @@ class PerObjFit(object):
         >>> print mcmc_res.flatchain.mean(axis=0)
         """
         # First, set guess, either by optimization or passed values
-        guess = [hs0,alpha0,beta0,lnA0]
+        guess = np.array([hs0,alpha0,beta0,lnA0])
         bounds = [self.hs_bounds, self.alpha_bounds, self.beta_bounds,self.lnA_bounds]
 
         if opt_init:
+            if self.sd_dex is not None:
+                raise NotImplementedError("Can't yet optimize with uncertainties")
+
             if not hasattr(self, "downhill_res"):
                 self.run_downhill(hs0, alpha0, beta0, lnA0, debug, **opt_kw)
             res = self.downhill_res
@@ -400,16 +615,63 @@ class PerObjFit(object):
 
         initial = self._get_initial_ball(guess, bounds, nchains)
 
-        self.mcmc_res = emcee.EnsembleSampler(nchains, initial.shape[1], _lnl,
-                                              args=(self.m, self.nm, self.mmin, self.V, bounds,
-                                                    self.prior_func, self.prior_kwargs,
-                                                    debug, False), **kwargs)
 
+        if self.sd_dex is not None:
+            if self.n_mnodes is not None:
+                guess_coeffs = np.zeros((self.n_snodes*self.n_mnodes))
+                guess_coeffs[0] += 3.5 * max([s.max() for s in self.sd_dex])
+                initial_mest = self._get_initial_ball(guess_coeffs, [(g-1,g+1) for g in guess_coeffs],nchains)
+
+            else:
+                if logm0 is None:
+                    initial_mest = self._get_initial_ball(np.array([np.log10(m) for m in self.m]).flatten(),None,nchains)
+                else:
+                    initial_mest = self._get_initial_ball(logm0,None,nchains)
+
+            initial = np.concatenate((initial, initial_mest),axis=1)
+
+        if self.sd_dex is None:
+            self.mcmc_res = emcee.EnsembleSampler(nchains, initial.shape[1], _lnl,
+                                                  args=(self.m, self.nm, self.mmin, self.V, bounds,
+                                                        self.prior_func, self.prior_kwargs,
+                                                        debug, False), **kwargs)
+        elif self.n_mnodes is None:
+            self.mcmc_res = emcee.EnsembleSampler(nchains, initial.shape[1], _lnl_with_uncertainty,
+                                                  args=(self.logm,
+                                                        self.nm, self.sd_dex,self.V, bounds,
+                                                        self.prior_func, self.prior_kwargs,
+                                                        debug), **kwargs)
+        else:
+            self.mcmc_res = emcee.EnsembleSampler(nchains, initial.shape[1], _lnl_with_uncertainty_poly,
+                                                  args=(self.logm,
+                                                        self.nm, self.sd_dex,self.MS,self.V, bounds,
+                                                        self.prior_func, self.prior_kwargs,
+                                                        debug), **kwargs)
         if warmup:
             initial, lnprob, rstate = self.mcmc_res.run_mcmc(initial, warmup, storechain=False)
             self.mcmc_res.reset()
 
-        self.mcmc_res.run_mcmc(initial, iterations)
+        if self.sd_dex is None or self.n_mnodes is not None:
+            self.mcmc_res.run_mcmc(initial, iterations)
+        else:
+            f = open(chainfile, "w")
+            f.close()
+
+            if save_latent:
+                f = open(chainfile.replace(".","_latent."), "w")
+                f.close()
+
+            for result in self.mcmc_res.sample(initial, iterations=iterations, storechain=False):
+                position = result[0]
+
+                with open(chainfile, "a") as f:
+                    np.savetxt(f,position[:,:4])
+
+                if save_latent:
+                    with open(chainfile.replace(".","_latent."),"a") as f:
+                        np.save(f,position[:,4:])
+#                    for k in range(position.shape[0]):
+#                        f.write("{0:4d} {1:s}\n".format(k, " ".join(position[k])))
 
         return self.mcmc_res
 
@@ -439,37 +701,22 @@ class PerObjFit(object):
             Returned only if `ret_jac` is `True`. The jacobian at the current parameter vector.
 
         """
-        bounds = self._get_bounds(p)
-        return _lnl(p, self.m, self.nm, self.mmin, bounds, self.prior_func,debug, ret_jac)
-
-    def get_norm(self,p,V):
-        """
-        Given a set of parameters which are the output of either a downhill or MCMC fit,
-        return a weighted normalisation, based on the largeness of the datasets.
-
-        This normalisation will effectively give the number density, in units of V^{-1}.
-        """
-        if len(p) == len(self.m) + 3:
-            p = p[3:]
-
-        if len(p)==1:
-            return p[0]
-
-        p = np.array(p)
-        assert len(V)==len(p)
-
-        V = np.array(V)
-        weight = [np.sum(nm) for nm in self.nm]
-
-        p -=  np.log(V)
-
-        return np.average(p,weights=weight)
+        bounds = [self.hs_bounds, self.alpha_bounds, self.beta_bounds,self.lnA_bounds]
+        if self.sd_dex is None:
+            return _lnl(p, self.m, self.nm, self.mmin, self.V,bounds, self.prior_func,self.prior_kwargs,debug, ret_jac)
+        elif self.n_mnodes is None:
+            return _lnl_with_uncertainty(p, self.logm, self.nm, self.sd_dex, self.V,
+                                         bounds, self.prior_func,self.prior_kwargs,debug)
+        else:
+            return _lnl_with_uncertainty_poly(p, self.logm, self.nm, self.sd_dex, self.MS, self.V,
+                                              bounds, self.prior_func,self.prior_kwargs,debug)
 # =========================================================================================
 # STAN ROUTINES
 # =========================================================================================
+
 _functions_block = """
 functions {
-    /**
+   /**
     * gammainc() is the upper incomplete gamma function (not regularized)
     * @param real a, shape parameter
     * @param real x, position > 0
@@ -482,6 +729,7 @@ functions {
       real ssum;
 
       if(a>=0) return gamma_q(a,x) * tgamma(a);
+      if(a< -10) reject("a in gammainc(a,x) should not be less than -10 or memory gets ridiculous, have a = ", a);
 
       ap1 <- a+1;
 
@@ -508,56 +756,46 @@ functions {
     * @param real alpha, power-law slope
     * @param real beta, cut-off parameter
     */
-    real truncated_logGGD_log(vector y, real ymin, real h, real alpha, real beta, real lnA){
+    real truncated_logGGD_log(vector y, real h, real alpha, real beta, real lnA, real gzx){
         vector[num_elements(y)] x;
-        real xmin;
-        real z;
 
-        z <- (alpha+1)/beta;
         x <- exp(log10()*y*beta);
-        xmin <- exp(log10()*ymin*beta);
-        return sum(lnA + log(beta) + log(log10()) + h + log10()*y*(alpha+1) - x) - exp(lnA)*pow(10,h)*gammainc(z,xmin);
+        return sum(lnA + log(beta) + log(log10()) + log10()*h + log10()*y*(alpha+1) - x) - exp(lnA)*pow(10,h)*gzx;
     }
 }
 """
 
+
 _with_errors_data = """
 data {
     int<lower=0> N;                // number of halos
-    vector<lower=0>[N] log_m_meas; // measured halo masses
+    vector[N] log_m_meas; // measured halo masses
     vector<lower=0>[N] sd_dex;     // uncertainty in halo masses (dex)
     real<lower=0> V;               // Volume of the survey
+    int<lower=0> verbose;          // Whether the run should be verbose or not.
 
     // CONTROLS FOR PARAMETER BOUNDS
-    real<lower=0> hs_min;             // Lower bound of logHs
-    real<lower=0,upper=20> hs_max;    // Upper bound of logHs
-    real<lower=-2,upper=0> alpha_min; // Lower bound of alpha
-    real<lower=-2,upper=0> alpha_max; // Upper bound of alpha
-    real<lower=0> beta_min;           // Lower bound of beta
-    real<lower=0> beta_max;           // Upper bound of beta
-    real<lower=0> mmin_min;           // Lower bound of log_mmin
-    real<lower=0> mmin_max;           // Upper bound of log_mmin
-    real<lower=0,upper=20>mtrue_max;  // Upper bound of true masses
-    real  lnA_min;                    // lower bound of lnA
-    real  lnA_max;                    // upper bound of lnA
+    vector[2] hs_bounds;             // Bounds of logHs
+    vector[2] alpha_bounds;          // Bounds of alpha
+    vector<lower=0>[2] beta_bounds;  // Bounds of beta
+    vector[2] mmin_bounds;           // Bounds of log_mmin
+    vector[2] mtrue_bounds;          // Bounds of log_mtrue
+    vector[2] lnA_bounds;            // Bounds of lnA
 }
 """
 
 _simple_data = """
 data {
-    int<lower=0> N;                // number of halos
-    vector<lower=0>[N] log_m;      // measured halo masses
-    real<lower=0> V;               // Volume of the survey
+    int<lower=0> N;                 // number of halos
+    vector<lower=0>[N] log_m;       // measured halo masses
+    real<lower=0> V;                // Volume of the survey
+    int<lower=0> verbose;          // Whether the run should be verbose or not.
 
     // CONTROLS FOR PARAMETER BOUNDS
-    real<lower=0> hs_min;             // Lower bound of logHs
-    real<lower=0,upper=20> hs_max;    // Upper bound of logHs
-    real<lower=-2,upper=0> alpha_min; // Lower bound of alpha
-    real<lower=-2,upper=0> alpha_max; // Upper bound of alpha
-    real<lower=0> beta_min;           // Lower bound of beta
-    real<lower=0> beta_max;           // Upper bound of beta
-    real  lnA_min;                    // lower bound of lnA
-    real  lnA_max;                    // upper bound of lnA
+    vector[2] hs_bounds;            // Bounds of logHs
+    vector[2] alpha_bounds;         // Bounds of alpha
+    vector<lower=0>[2] beta_bounds; // Bounds of beta
+    vector[2] lnA_bounds;           // Bounds of lnA
 }
 
 transformed data {
@@ -566,33 +804,103 @@ transformed data {
 }
 """
 
-_with_errors_params = """
+_with_errors_params_mmin = """
 parameters {
-    real<lower=hs_min,upper=hs_max> logHs;               // Characteristic halo mass
-    real<lower=alpha_min,upper=alpha_max> alpha;         // Power-law slope
-    real<lower=beta_min,upper=beta_max> beta;            // Cut-off parameter
-    real<lower=lnA_min,upper=lnA_max> lnA;               // Normalisation
-    real<lower=mmin_min,upper=mmin_max> log_mmin;        // Truncation mass
-    vector<lower=log_mmin,upper=mtrue_max>[N] log_mtrue; // True mass estimates
+    real<lower=hs_bounds[1],upper=hs_bounds[2]> logHs;               // Characteristic halo mass
+    real<lower=alpha_bounds[1],upper=alpha_bounds[2]> alpha;         // Power-law slope
+    real<lower=beta_bounds[1],upper=beta_bounds[2]> beta;            // Cut-off parameter
+    real<lower=lnA_bounds[1],upper=lnA_bounds[2]> lnA;               // Normalisation
+    real<lower=mmin_bounds[1],upper=mmin_bounds[2]> log_mmin;        // Truncation mass
+    vector<lower=log_mmin,upper=mtrue_bounds[2]>[N] log_mtrue;       // True mass estimates
 }
 
 transformed parameters {
     real raw_lnA;
+    real gzx;
+
     raw_lnA <- lnA + log(V);
+    gzx <- gammainc((alpha+1)/beta,exp(log10()*(log_mmin-logHs)*beta));
+}
+"""
+
+
+_with_errors_params_mmin_pdf = """
+parameters {
+    real<lower=alpha_bounds[1],upper=alpha_bounds[2]> alpha;         // Power-law slope
+    real<lower=beta_bounds[1],upper=beta_bounds[2]> beta;            // Cut-off parameter
+    real<lower=mmin_bounds[1],upper=mmin_bounds[2]> log_mmin;        // Truncation mass
+    vector<lower=log_mmin,upper=mtrue_bounds[2]>[N] log_mtrue;       // True mass estimates
+    //real<lower=log_mmin-1,upper=max(log_mtrue)+0.5> logHs;               // Characteristic halo mass
+    real<lower=hs_bounds[1],upper=hs_bounds[2]> logHs;               // Characteristic halo mass
+}
+
+transformed parameters {
+    real lnA;
+    real raw_lnA;
+    real gzx;
+
+    gzx <- gammainc((alpha+1)/beta,exp(log10()*(log_mmin-logHs)*beta));
+    raw_lnA <- log(N) - log10()*logHs - log(gzx);
+    lnA <- raw_lnA - log(V);
+}
+"""
+
+_with_errors_params = """
+parameters {
+    real<lower=hs_bounds[1],upper=hs_bounds[2]> logHs;               // Characteristic halo mass
+    real<lower=alpha_bounds[1],upper=alpha_bounds[2]> alpha;         // Power-law slope
+    real<lower=beta_bounds[1],upper=beta_bounds[2]> beta;            // Cut-off parameter
+    real<lower=lnA_bounds[1],upper=lnA_bounds[2]> lnA;               // Normalisation
+    vector<lower=mtrue_bounds[1],upper=mtrue_bounds[2]>[N] log_mtrue;// True mass estimates
+}
+
+transformed parameters {
+    real raw_lnA;
+    real log_mmin;
+    real gzx;
+
+    raw_lnA <- lnA + log(V);
+    log_mmin <- min(log_mtrue);
+    gzx <- gammainc((alpha+1)/beta,exp(log10()*(log_mmin-logHs)*beta));
+}
+"""
+
+_with_errors_params_pdf = """
+parameters {
+    real<lower=hs_bounds[1],upper=hs_bounds[2]> logHs;               // Characteristic halo mass
+    real<lower=alpha_bounds[1],upper=alpha_bounds[2]> alpha;         // Power-law slope
+    real<lower=beta_bounds[1],upper=beta_bounds[2]> beta;            // Cut-off parameter
+    vector<lower=mtrue_bounds[1],upper=mtrue_bounds[2]>[N] log_mtrue;// True mass estimates
+}
+
+transformed parameters {
+    real raw_lnA;
+    real lnA;
+    real log_mmin;
+    real gzx;
+
+
+    log_mmin <- min(log_mtrue);
+    gzx <- gammainc((alpha+1)/beta,exp(log10()*(log_mmin-logHs)*beta));
+    raw_lnA <- log(N) - log10()*logHs - log(gzx);
+    lnA <- raw_lnA - log(V);
 }
 """
 
 _simple_params = """
 parameters {
-    real<lower=hs_min,upper=hs_max> logHs;               // Characteristic halo mass
-    real<lower=alpha_min,upper=alpha_max> alpha;         // Power-law slope
-    real<lower=beta_min,upper=beta_max> beta;            // Cut-off parameter
-    real<lower=lnA_min,upper=lnA_max> lnA;               // Normalisation
+    real<lower=alpha_bounds[1],upper=alpha_bounds[2]> alpha;         // Power-law slope
+    real<lower=beta_bounds[1],upper=beta_bounds[2]> beta;            // Cut-off parameter
+    real<lower=lnA_bounds[1],upper=lnA_bounds[2]> lnA;               // Normalisation
+    real<lower=log_mmin-1,upper=max(log_m)+0.5> logHs;               // Characteristic halo mass
 }
 
 transformed parameters {
     real raw_lnA;
+    real gzx;
+
     raw_lnA <- lnA + log(V);
+    gzx <- gammainc((alpha+1)/beta,exp(log10()*(log_mmin-logHs)*beta));
 }
 
 """
@@ -600,42 +908,69 @@ transformed parameters {
 _with_errors_model = """
 model {
     vector[N] y;
-    real ymin;
-    y <- log_mtrue-logHs;
-    ymin <- log_mmin-logHs;
+    real lp_bounds;
+    real lp_ggd;
+    real lp_mass;
 
-    y ~ truncated_logGGD(ymin, logHs, alpha, beta, raw_lnA);
-    log_mtrue ~ normal(log_m_meas,sd_dex);
+    y <- log_mtrue-logHs;
+    //if (verbose>0){
+    //   lp_bounds <- get_lp();
+    //    print("Likelihood from bounds: ", lp_bounds);
+    //    print("raw_lnA, gzx: ", raw_lnA," ", gzx);
+    //}
+
+    y ~ truncated_logGGD(logHs, alpha, beta, raw_lnA, gzx);
+
+    //if (verbose>0){
+    //    lp_ggd <- get_lp();
+    //   print("Likelihood from GGD: ", lp_ggd - lp_bounds);
+    //}
+    log_m_meas ~ normal(log_mtrue,sd_dex);
+
+    //if (verbose>0){
+    //    lp_mass <- get_lp();
+    //    print("Likelihood from mass movement: ", lp_mass - lp_ggd);
+    //}
 }
 """
 
 _simple_model = """
 model {
     vector[N] y;
-    real ymin;
     y <- log_m-logHs;
-    ymin <- log_mmin-logHs;
 
-    y ~ truncated_logGGD(ymin, logHs, alpha, beta, raw_lnA);
+    y ~ truncated_logGGD(logHs, alpha, beta, raw_lnA, gzx);
 }
 """
 
 
-def _create_model(per_object_errors=False):
+def _create_model(per_object_errors=False,pdf_likelihood=False,mmin_free=True):
     if per_object_errors:
-        return _functions_block + _with_errors_data + _with_errors_params + _with_errors_model
+        if not pdf_likelihood:
+            if not mmin_free:
+                return _functions_block + _with_errors_data + _with_errors_params + _with_errors_model
+            else:
+                return _functions_block + _with_errors_data + _with_errors_params_mmin + _with_errors_model
+        else:
+            if not mmin_free:
+                return _functions_block + _with_errors_data + _with_errors_params_pdf + _with_errors_model
+            else:
+                return _functions_block + _with_errors_data + _with_errors_params_mmin_pdf + _with_errors_model
     else:
         return _functions_block + _simple_data + _simple_params + _simple_model
 
 
-def _write_model(fname, per_object_errors=False):
-    s = _create_model(per_object_errors)
+def _write_model(fname, per_object_errors=False,pdf_likelihood=False,mmin_free=True):
+    s = _create_model(per_object_errors,pdf_likelihood,mmin_free)
     with open(fname, "w") as f:
         f.write(s)
 
 
-def _compile_model(per_object_errors=False):
-    return _stan_cache(model_name="MRP", model_code=_create_model(per_object_errors))
+def _compile_model(per_object_errors=False,pdf_likelihood=False,mmin_free=True):
+    return _stan_cache(model_name="MRP_%s_%s_%s"%("hier" if per_object_errors else "simple",
+                                                  "pdf" if pdf_likelihood else "poisson",
+                                                  "mminFree" if mmin_free else "mtrueFree"),
+                       model_code=_create_model(per_object_errors,pdf_likelihood,mmin_free))
 
 
 def _stan_cache(model_code, model_name=None):
@@ -666,9 +1001,12 @@ def _stan_cache(model_code, model_name=None):
 
 def fit_perobj_stan(logm, V=1,sd_dex=None, warmup=None, iter=1000,
                     hs_bounds=(12, 16), alpha_bounds=(-1.99, -1.3),
-                    beta_bounds=(0.3, 2.0), mmin_bounds=None,
-                    lnA_bounds=(-40,0),opt=False,
-                    mtrue_max=16.0, model=None, **kwargs):
+                    beta_bounds=(0.3, 2.0),lnA_bounds=(-30,-20),
+                    mmin_bounds=(10,14),
+                    opt=False,
+                    mtrue_bounds=(10,17.0), model=None, use_pdf_lnl = False, mmin_free=True,
+                    verbose=False,
+                    **kwargs):
     """
     Fit the MRP to individual halo masses using the Stan programming language.
 
@@ -719,45 +1057,38 @@ def fit_perobj_stan(logm, V=1,sd_dex=None, warmup=None, iter=1000,
         stan_data = {"N": len(logm),
                      "V":V,
                      "log_m": logm,
-                     "hs_min": hs_bounds[0],
-                     "hs_max": hs_bounds[1],
-                     "alpha_min": alpha_bounds[0],
-                     "alpha_max": alpha_bounds[1],
-                     "beta_min": beta_bounds[0],
-                     "beta_max": beta_bounds[1],
-                     "lnA_min":lnA_bounds[0],
-                     "lnA_max":lnA_bounds[1]}
+                     "hs_bounds": hs_bounds,
+                     "alpha_bounds": alpha_bounds,
+                     "beta_bounds": beta_bounds,
+                     "lnA_bounds":lnA_bounds,
+                     "verbose":int(verbose)}
     else:
         if np.isscalar(sd_dex):
-            sd_dex = np.repeat(sd_dex, len(m))
-
-        if mmin_bounds is None:
-            mmin_bounds = (np.log10(m.min()) - 1, np.log10(m.min()) + 1)
+            sd_dex = np.repeat(sd_dex, len(logm))
 
         stan_data = {"N": len(logm),
                      "V":V,
                      "log_m_meas": logm,
                      "sd_dex": sd_dex,
-                     "hs_min": hs_bounds[0],
-                     "hs_max": hs_bounds[1],
-                     "alpha_min": alpha_bounds[0],
-                     "alpha_max": alpha_bounds[1],
-                     "beta_min": beta_bounds[0],
-                     "beta_max": beta_bounds[1],
-                     "mmin_min": mmin_bounds[0],
-                     "mmin_max": mmin_bounds[1],
-                     "mtrue_max": mtrue_max,
-                     "lnA_min":lnA_bounds[0],
-                     "lnA_max":lnA_bounds[1]}
+                     "hs_bounds": hs_bounds,
+                     "alpha_bounds": alpha_bounds,
+                     "beta_bounds": beta_bounds,
+                     "mtrue_bounds": mtrue_bounds,
+                     "mmin_bounds":mmin_bounds,
+                     "lnA_bounds":lnA_bounds,
+                     "verbose":int(verbose)}
 
     if model is None:
-        model = _compile_model(False if sd_dex is None else True)
+        model = _compile_model(False if sd_dex is None else True, use_pdf_lnl, mmin_free)
 
     warmup = warmup or iter/2
 
     if opt:
-        fit = model.optimizing(data=stan_data)
+        fit = model.optimizing(data=stan_data,**kwargs)
     else:
         fit = model.sampling(stan_data, iter=iter, warmup=warmup, **kwargs)
 
     return fit
+
+
+

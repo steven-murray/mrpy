@@ -1,5 +1,5 @@
 import numpy as np
-from mrpy.fit_perobj import PerObjFit
+from mrpy.fit_perobj import PerObjFit, fit_perobj_stan
 from mrpy.core import dndm, A_rhoc, _getnorm
 from mrpy.stats import TGGD
 from nose.tools import nottest
@@ -8,15 +8,17 @@ np.random.seed(42)
 
 def test_s0():
     np.random.seed(42)
+    N = int(3e5)
     t = TGGD(scale=1e14,a=-1.8,b=1.0,xmin=1e12)
-    r = t.rvs(3e4)
+    A = N/t._pdf_norm()
+    r = t.rvs(N)
 
-    FitObj = PerObjFit(r)#,weight_scale=0)
-    res,po = FitObj.run_downhill(hs0=14, alpha0=-1.8, beta0=1.0)
+    FitObj = PerObjFit(r, lnA_bounds=(np.log(A)-5, np.log(A)+5))#,weight_scale=0)
+    res,po = FitObj.run_downhill(hs0=14, alpha0=-1.8, beta0=1.0,lnA0=np.log(A))
 
     print res.x
     assert res.success
-    assert np.all(np.isclose(res.x[:3],[14.0,-1.8,1.0],rtol=5e-2))
+    assert np.all(np.isclose(res.x,[14.0,-1.8,1.0,np.log(A)],rtol=5e-2))
 
 def test_weighted():
     np.random.seed(42)
@@ -50,6 +52,25 @@ def test_multisim():
     assert np.all(np.isclose(res.x,res1.x,rtol=5e-2))
 
 
+def test_stan():
+    # Use exactly the same data as for emcee and downhill method.
+    np.random.seed(42)
+    N = int(3e5)
+    t = TGGD(scale=1e14,a=-1.8,b=1.0,xmin=1e12)
+    A = N/t._pdf_norm()
+    r = t.rvs(N)
+
+    res = fit_perobj_stan(np.log10(r), V=1,
+                          opt=True,model=None,
+                          init=[{"logHs":14.0,"alpha":-1.8,"beta":1.0,"lnA":np.log(A)}])
+
+    print res
+    #assert res.success
+    assert np.isclose(res['logHs'],14.0,rtol=5e-2)
+    assert np.isclose(res['alpha'],-1.8,rtol=5e-2)
+    assert np.isclose(res['beta'],1.0,rtol=5e-2)
+    assert np.isclose(res['lnA'],np.log(A),rtol=5e-2)
+#    assert np.all(np.isclose(res[:3],[14.0,-1.8,1.0],rtol=5e-2))
 
 # def test_weighted_nu2():
 #     t = TGGD(scale=1e14,a=-1.9,b=0.8,xmin=1e10)
