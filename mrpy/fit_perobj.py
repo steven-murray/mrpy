@@ -18,7 +18,7 @@ import likelihoods as lk
 from scipy.stats import truncnorm
 from itertools import product
 from mrpy.special import gammainc
-
+import re
 
 try:
     import emcee
@@ -765,37 +765,18 @@ functions {
 }
 """
 
-
-_with_errors_data = """
-data {
-    int<lower=0> N;                // number of halos
-    vector[N] log_m_meas; // measured halo masses
-    vector<lower=0>[N] sd_dex;     // uncertainty in halo masses (dex)
-    real<lower=0> V;               // Volume of the survey
-    int<lower=0> verbose;          // Whether the run should be verbose or not.
-
-    // CONTROLS FOR PARAMETER BOUNDS
-    vector[2] hs_bounds;             // Bounds of logHs
-    vector[2] alpha_bounds;          // Bounds of alpha
-    vector<lower=0>[2] beta_bounds;  // Bounds of beta
-    vector[2] mmin_bounds;           // Bounds of log_mmin
-    vector[2] mtrue_bounds;          // Bounds of log_mtrue
-    vector[2] lnA_bounds;            // Bounds of lnA
-}
-"""
-
 _simple_data = """
 data {
-    int<lower=0> N;                 // number of halos
-    vector<lower=0>[N] log_m;       // measured halo masses
-    real<lower=0> V;                // Volume of the survey
-    int<lower=0> verbose;          // Whether the run should be verbose or not.
+    int<lower=0>       N;        // number of halos
+    vector<lower=0>[N] log_m;    // measured halo masses
+    real<lower=0>      V;        // Volume of the survey
+    int<lower=0>       verbose;  // Whether the run should be verbose or not.
 
-    // CONTROLS FOR PARAMETER BOUNDS
-    vector[2] hs_bounds;            // Bounds of logHs
-    vector[2] alpha_bounds;         // Bounds of alpha
-    vector<lower=0>[2] beta_bounds; // Bounds of beta
-    vector[2] lnA_bounds;           // Bounds of lnA
+    //Priors
+    real logHs_prior[2];
+    real alpha_prior[2];
+    real beta_prior[2];
+    real lnA_prior[2];
 }
 
 transformed data {
@@ -804,173 +785,155 @@ transformed data {
 }
 """
 
-_with_errors_params_mmin = """
-parameters {
-    real<lower=hs_bounds[1],upper=hs_bounds[2]> logHs;               // Characteristic halo mass
-    real<lower=alpha_bounds[1],upper=alpha_bounds[2]> alpha;         // Power-law slope
-    real<lower=beta_bounds[1],upper=beta_bounds[2]> beta;            // Cut-off parameter
-    real<lower=lnA_bounds[1],upper=lnA_bounds[2]> lnA;               // Normalisation
-    real<lower=mmin_bounds[1],upper=mmin_bounds[2]> log_mmin;        // Truncation mass
-    vector<lower=log_mmin,upper=mtrue_bounds[2]>[N] log_mtrue;       // True mass estimates
-}
-
-transformed parameters {
-    real raw_lnA;
-    real gzx;
-
-    raw_lnA <- lnA + log(V);
-    gzx <- gammainc((alpha+1)/beta,exp(log10()*(log_mmin-logHs)*beta));
-}
-"""
+_with_errors_data = re.sub("transformed data {([^]]+)}","",_simple_data)                       # Remove transformed data block
+_with_errors_data = re.sub(r"(.*\n.*//Priors)", r"    vector<lower=0>[N] sd_dex;   // Uncertainty in measurement\n\1",_with_errors_data)    # Add in the uncertainties
+_with_errors_data = re.sub(r"(//Priors\n)", r"\1    real log_mmin_prior[2];\n",_with_errors_data)    # Add in the uncertainties
 
 
-_with_errors_params_mmin_pdf = """
-parameters {
-    real<lower=alpha_bounds[1],upper=alpha_bounds[2]> alpha;         // Power-law slope
-    real<lower=beta_bounds[1],upper=beta_bounds[2]> beta;            // Cut-off parameter
-    real<lower=mmin_bounds[1],upper=mmin_bounds[2]> log_mmin;        // Truncation mass
-    vector<lower=log_mmin,upper=mtrue_bounds[2]>[N] log_mtrue;       // True mass estimates
-    //real<lower=log_mmin-1,upper=max(log_mtrue)+0.5> logHs;               // Characteristic halo mass
-    real<lower=hs_bounds[1],upper=hs_bounds[2]> logHs;               // Characteristic halo mass
-}
+# Create single-error (potentially forced) variant.
+_with_error_data = _with_errors_data.replace("vector<lower=0>[N] sd_dex;","real<lower=0> sd_dex;")
 
-transformed parameters {
-    real lnA;
-    real raw_lnA;
-    real gzx;
-
-    gzx <- gammainc((alpha+1)/beta,exp(log10()*(log_mmin-logHs)*beta));
-    raw_lnA <- log(N) - log10()*logHs - log(gzx);
-    lnA <- raw_lnA - log(V);
-}
-"""
-
-_with_errors_params = """
-parameters {
-    real<lower=hs_bounds[1],upper=hs_bounds[2]> logHs;               // Characteristic halo mass
-    real<lower=alpha_bounds[1],upper=alpha_bounds[2]> alpha;         // Power-law slope
-    real<lower=beta_bounds[1],upper=beta_bounds[2]> beta;            // Cut-off parameter
-    real<lower=lnA_bounds[1],upper=lnA_bounds[2]> lnA;               // Normalisation
-    vector<lower=mtrue_bounds[1],upper=mtrue_bounds[2]>[N] log_mtrue;// True mass estimates
-}
-
-transformed parameters {
-    real raw_lnA;
-    real log_mmin;
-    real gzx;
-
-    raw_lnA <- lnA + log(V);
-    log_mmin <- min(log_mtrue);
-    gzx <- gammainc((alpha+1)/beta,exp(log10()*(log_mmin-logHs)*beta));
-}
-"""
-
-_with_errors_params_pdf = """
-parameters {
-    real<lower=hs_bounds[1],upper=hs_bounds[2]> logHs;               // Characteristic halo mass
-    real<lower=alpha_bounds[1],upper=alpha_bounds[2]> alpha;         // Power-law slope
-    real<lower=beta_bounds[1],upper=beta_bounds[2]> beta;            // Cut-off parameter
-    vector<lower=mtrue_bounds[1],upper=mtrue_bounds[2]>[N] log_mtrue;// True mass estimates
-}
-
-transformed parameters {
-    real raw_lnA;
-    real lnA;
-    real log_mmin;
-    real gzx;
-
-
-    log_mmin <- min(log_mtrue);
-    gzx <- gammainc((alpha+1)/beta,exp(log10()*(log_mmin-logHs)*beta));
-    raw_lnA <- log(N) - log10()*logHs - log(gzx);
-    lnA <- raw_lnA - log(V);
-}
-"""
+# _with_errors_data = """
+# data {
+#     int<lower=0> N;                // number of halos
+#     vector[N] log_m_meas;          // measured halo masses
+#     vector<lower=0>[N] sd_dex;     // uncertainty in halo masses (dex)
+#     real<lower=0> V;               // Volume of the survey
+#     int<lower=0> verbose;          // Whether the run should be verbose or not.
+# }
+# """
 
 _simple_params = """
 parameters {
-    real<lower=alpha_bounds[1],upper=alpha_bounds[2]> alpha;         // Power-law slope
-    real<lower=beta_bounds[1],upper=beta_bounds[2]> beta;            // Cut-off parameter
-    real<lower=lnA_bounds[1],upper=lnA_bounds[2]> lnA;               // Normalisation
-    real<lower=log_mmin-1,upper=max(log_m)+0.5> logHs;               // Characteristic halo mass
+    real logHs;         // Characteristic halo mass
+    real alpha;         // Power-law slope
+    real<lower=0> beta; // Cut-off parameter
+    real lnA;           // Normalisation
 }
 
 transformed parameters {
     real raw_lnA;
     real gzx;
 
-    raw_lnA <- lnA + log(V);
     gzx <- gammainc((alpha+1)/beta,exp(log10()*(log_mmin-logHs)*beta));
-}
-
-"""
-
-_with_errors_model = """
-model {
-    vector[N] y;
-    real lp_bounds;
-    real lp_ggd;
-    real lp_mass;
-
-    y <- log_mtrue-logHs;
-    //if (verbose>0){
-    //   lp_bounds <- get_lp();
-    //    print("Likelihood from bounds: ", lp_bounds);
-    //    print("raw_lnA, gzx: ", raw_lnA," ", gzx);
-    //}
-
-    y ~ truncated_logGGD(logHs, alpha, beta, raw_lnA, gzx);
-
-    //if (verbose>0){
-    //    lp_ggd <- get_lp();
-    //   print("Likelihood from GGD: ", lp_ggd - lp_bounds);
-    //}
-    log_m_meas ~ normal(log_mtrue,sd_dex);
-
-    //if (verbose>0){
-    //    lp_mass <- get_lp();
-    //    print("Likelihood from mass movement: ", lp_mass - lp_ggd);
-    //}
+    raw_lnA <- lnA + log(V);
 }
 """
+
+# Add extra parameter when dealing with errors
+_with_errors_params = re.sub("\n}","""
+    real log_mmin;                       // Truncation mass
+    vector<lower=log_mmin>[N] log_mest;  // True mass estimates
+}
+""", _simple_params,count=1)
+
+# _with_errors_params_mmin = """
+# parameters {
+#     real logHs;                          // Characteristic halo mass
+#     real alpha;                          // Power-law slope
+#     real<lower=0> beta;                  // Cut-off parameter
+#     real lnA;                            // Normalisation
+#     real log_mmin;                       // Truncation mass
+#     vector<lower=log_mmin>[N] log_mtrue; // True mass estimates
+# }
+#
+# transformed parameters {
+#     real raw_lnA;
+#     real gzx;
+#
+#     gzx <- gammainc((alpha+1)/beta,exp(log10()*(log_mmin-logHs)*beta));
+#     raw_lnA <- lnA + log(V);
+# }
+# """
+
+# Create pdf-version of the parameters
+_with_errors_params_pdf = re.sub(".*real lnA.*","",_with_errors_params)
+_with_errors_params_pdf = re.sub(r"(transformed parameters \{.*\n)",r"\1    real lnA;\n",_with_errors_params_pdf)
+#lst.insert(lst.index("transformed parameters {")+1,"    real lnA;")
+
+_with_errors_params_pdf = re.sub("raw_lnA.*lnA.*;","""
+raw_lnA <- log(N) - log10()*logHs - log(gzx);
+    lnA = raw_lnA - log(V);
+""",_with_errors_params_pdf)
+
+#lst.insert(-2,"    lnA = raw_lnA - log(V);")
+#print lst
+#_with_errors_params_pdf = "\n".join(lst)
+
+# _with_errors_params_mmin_pdf = """
+# parameters {
+#     real logHs;                          // Characteristic halo mass
+#     real alpha;                          // Power-law slope
+#     real<lower=0> beta;                  // Cut-off parameter
+#     real log_mmin;                       // Truncation mass
+#     vector<lower=log_mmin>[N] log_mtrue; // True mass estimates
+# }
+#
+# transformed parameters {
+#     real lnA;
+#     real raw_lnA;
+#     real gzx;
+#
+#     gzx <- gammainc((alpha+1)/beta,exp(log10()*(log_mmin-logHs)*beta));
+#     raw_lnA <- log(N) - log10()*logHs - log(gzx);
+#     lnA <- raw_lnA - log(V);
+# }
+# """
 
 _simple_model = """
 model {
     vector[N] y;
     y <- log_m-logHs;
 
+    // Priors
+    logHs ~ normal(logHs_prior[1],logHs_prior[2]);
+    alpha ~ normal(alpha_prior[1],alpha_prior[2]);
+    beta ~ cauchy(beta_prior[1],beta_prior[2])T[0,];
+    lnA ~ normal(lnA_prior[1],lnA_prior[2]);
+
     y ~ truncated_logGGD(logHs, alpha, beta, raw_lnA, gzx);
 }
 """
 
+# Add in measured prior bit.
+_with_errors_model = re.sub("(.*)\n(.*)(y ~)",r"\2log_mmin ~ normal(log_mmin_prior[1],log_mmin_prior[2]);\n\n\2\3",_simple_model)
+_with_errors_model = re.sub("}","    log_m ~ normal(log_mest,sd_dex);\n}",_with_errors_model)
 
-def _create_model(per_object_errors=False,pdf_likelihood=False,mmin_free=True):
-    if per_object_errors:
-        if not pdf_likelihood:
-            if not mmin_free:
-                return _functions_block + _with_errors_data + _with_errors_params + _with_errors_model
-            else:
-                return _functions_block + _with_errors_data + _with_errors_params_mmin + _with_errors_model
-        else:
-            if not mmin_free:
-                return _functions_block + _with_errors_data + _with_errors_params_pdf + _with_errors_model
-            else:
-                return _functions_block + _with_errors_data + _with_errors_params_mmin_pdf + _with_errors_model
-    else:
-        return _functions_block + _simple_data + _simple_params + _simple_model
+# """
+# model {
+#     vector[N] y;
+#
+#
+#     y <- log_mtrue-logHs;
+#     y ~ truncated_logGGD(logHs, alpha, beta, raw_lnA, gzx);
+#     log_m_meas ~ normal(log_mtrue,sd_dex);
+# }
+# """
 
 
-def _write_model(fname, per_object_errors=False,pdf_likelihood=False,mmin_free=True):
-    s = _create_model(per_object_errors,pdf_likelihood,mmin_free)
+
+def _create_model(uncertainties=False,single_sd=False,pdf_likelihood=True):
+    return (_functions_block +
+            ((_with_errors_data if not single_sd else _with_error_data) if uncertainties else _simple_data) +\
+            ((_with_errors_params_pdf if pdf_likelihood else _with_errors_params) if uncertainties else _simple_params)+
+            (_with_errors_model if uncertainties else _simple_model))
+
+
+def _write_model(fname, uncertainties=False,single_sd=False,pdf_likelihood=False):
+    s = _create_model(uncertainties,single_sd,pdf_likelihood)
     with open(fname, "w") as f:
         f.write(s)
 
 
-def _compile_model(per_object_errors=False,pdf_likelihood=False,mmin_free=True):
-    return _stan_cache(model_name="MRP_%s_%s_%s"%("hier" if per_object_errors else "simple",
-                                                  "pdf" if pdf_likelihood else "poisson",
-                                                  "mminFree" if mmin_free else "mtrueFree"),
-                       model_code=_create_model(per_object_errors,pdf_likelihood,mmin_free))
+def _compile_model(uncertainties=False,single_sd=False,pdf_likelihood=False):
+    if not uncertainties:
+        model_name = "MRP_simple"
+    else:
+        model_name = "MRP_hier_%s_%s"%("single" if single_sd else "multi",
+                                       "pdf" if pdf_likelihood else "poisson")
+
+    return _stan_cache(model_name=model_name,
+                       model_code=_create_model(uncertainties,single_sd,pdf_likelihood))
 
 
 def _stan_cache(model_code, model_name=None):
@@ -999,12 +962,11 @@ def _stan_cache(model_code, model_name=None):
     return sm
 
 
-def fit_perobj_stan(logm, V=1,sd_dex=None, warmup=None, iter=1000,
-                    hs_bounds=(12, 16), alpha_bounds=(-1.99, -1.3),
-                    beta_bounds=(0.3, 2.0),lnA_bounds=(-30,-20),
-                    mmin_bounds=(10,14),
-                    opt=False,
-                    mtrue_bounds=(10,17.0), model=None, use_pdf_lnl = False, mmin_free=True,
+def fit_perobj_stan(logm, V=1, sd_dex=None, warmup=None, iter=1000,
+                    hs_prior = (14.5,1.0), alpha_prior = (-1.9,0.15),
+                    beta_prior = (0.8,0.2), lnA_prior = (-43,2),
+                    log_mmin_prior = None,
+                    opt=False, model=None, use_pdf_lnl = True,
                     verbose=False,
                     **kwargs):
     """
@@ -1057,29 +1019,26 @@ def fit_perobj_stan(logm, V=1,sd_dex=None, warmup=None, iter=1000,
         stan_data = {"N": len(logm),
                      "V":V,
                      "log_m": logm,
-                     "hs_bounds": hs_bounds,
-                     "alpha_bounds": alpha_bounds,
-                     "beta_bounds": beta_bounds,
-                     "lnA_bounds":lnA_bounds,
+                     "logHs_prior":hs_prior,
+                     "alpha_prior":alpha_prior,
+                     "beta_prior":beta_prior,
+                     "lnA_prior":lnA_prior,
                      "verbose":int(verbose)}
     else:
-        if np.isscalar(sd_dex):
-            sd_dex = np.repeat(sd_dex, len(logm))
 
         stan_data = {"N": len(logm),
                      "V":V,
-                     "log_m_meas": logm,
+                     "log_m": logm,
                      "sd_dex": sd_dex,
-                     "hs_bounds": hs_bounds,
-                     "alpha_bounds": alpha_bounds,
-                     "beta_bounds": beta_bounds,
-                     "mtrue_bounds": mtrue_bounds,
-                     "mmin_bounds":mmin_bounds,
-                     "lnA_bounds":lnA_bounds,
+                     "logHs_prior": hs_prior,
+                     "alpha_prior": alpha_prior,
+                     "beta_prior": beta_prior,
+                     "lnA_prior": lnA_prior,
+                     "log_mmin_prior":log_mmin_prior,
                      "verbose":int(verbose)}
 
     if model is None:
-        model = _compile_model(False if sd_dex is None else True, use_pdf_lnl, mmin_free)
+        model = _compile_model(False if sd_dex is None else True, np.isscalar(sd_dex),use_pdf_lnl)
 
     warmup = warmup or iter/2
 
