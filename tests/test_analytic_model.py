@@ -21,63 +21,75 @@ alpha = -1.8
 beta = 0.7
 logHs = 14.0
 mmin = 11.0
-scale = 0
+lnA = -25
+#scale = 0
+
+SMALL = False
 
 # A series of trial parameters
-trials = [(logHs, alpha, beta, logHs, alpha, beta, scale),
-          (logHs, alpha, beta, logHs, alpha, beta, 1.0),
-          (logHs, alpha, beta, logHs*1.1, alpha, beta, scale),
-          (logHs, alpha, beta, logHs, alpha*1.05, beta, scale),
-          (logHs, alpha, beta, logHs, alpha, beta*1.1, scale)]
+trials = [(logHs, alpha, beta, lnA, logHs, alpha, beta,lnA),#, scale),
+          #(logHs, alpha, beta, logHs, alpha, beta),#, 1.0),
+          (logHs, alpha, beta, lnA, logHs*1.1, alpha, beta,lnA),#, scale),
+          (logHs, alpha, beta, lnA, logHs, alpha*1.05, beta,lnA),#, scale),
+          (logHs, alpha, beta, lnA, logHs, alpha, beta*1.1, lnA),
+          (logHs, alpha, beta, lnA, logHs, alpha, beta*1.1, lnA+0.5)]# scale)]
 
 
-def numerical_F(alpha, beta, logHs, scale=0, alphad=None, betad=None, logHsd=None):
+def numerical_F(alpha, beta, logHs, lnA, alphad=None, betad=None, logHsd=None,lnAd=None):
     alphad = alphad or alpha
     betad = betad or beta
     logHsd = logHsd or logHs
+    lnAd = lnAd or lnA
 
     m = np.logspace(mmin, 18, 1000)
-    mrp = PerObjLike(scale=scale, logm=np.log10(m), logHs=logHs, alpha=alpha, beta=beta)
-    mrpd = PerObjLike(scale=scale, logm=np.log10(m), logHs=logHsd, alpha=alphad, beta=betad)
-    integ = mrpd._g*(mrp._lng - np.log(mrp._q_))
-    return simps(integ, m)
+    mrp = PerObjLike(logm=np.log10(m), logHs=logHs, alpha=alpha, beta=beta, lnA=lnA)
+    mrpd = PerObjLike(logm=np.log10(m), logHs=logHsd, alpha=alphad, beta=betad,lnA = lnAd)
+    integ = mrpd.dndm()*np.log(mrp.dndm())
+    return simps(integ, m) - mrp.nbar
 
 
-def F_abs_ratio(logHs, alpha, beta, logHsd, alphad, betad, scale):
-    ia = IdealAnalytic(log_mmin=mmin, logHs=logHs, alpha=alpha, beta=beta, logHsd=logHsd,
-                       alphad=alphad, betad=betad, scale=scale)
-    assert np.isclose(ia._F/numerical_F(alpha, beta, logHs, scale, alphad, betad, logHsd), 1.0, rtol=1e-2)
+def F_abs_ratio(logHs, alpha, beta,lnA, logHsd, alphad, betad,lnAd):
+    ia = IdealAnalytic(log_mmin=mmin, logHs=logHs, alpha=alpha, beta=beta, lnA=lnA,logHsd=logHsd,
+                       alphad=alphad, betad=betad,lnAd=lnAd)
+    num = numerical_F(alpha, beta, logHs, lnA,alphad, betad, logHsd,lnAd)
+    print ia._F, num
+    assert np.isclose(ia._F,num, rtol=1e-2)
 
 
 def test_F_abs():
-    """
-    This test checks if F, defined as a numerical integral, is the same as the analytic case.
-    """
-    for h, a, b, hd, ad, bd, s in trials:
-        yield F_abs_ratio, h, a, b, hd, ad, bd, s
+    # """
+    # Test if F, defined as a numerical integral, is the same as the analytic case.
+    # """
+    for h, a, b, lnA, hd, ad, bd,lnAd in trials:
+        yield F_abs_ratio, h, a, b, lnA,hd, ad, bd,lnAd
 
 
 # --------- HELPER FUNCTIONS ----------------------------------------------------------
 def ideal_numerical_jh(q, dx=1e-4, hess=False, **kwargs):
+    global SMALL
+    if SMALL:
+        dx = 1e-10
     def func(**kwargs):
         return getattr(IdealAnalytic(**kwargs), q)
 
+    print dx
     if hess:
-        return numerical_hess(func, ["logHs", "alpha", 'beta'], dx, **kwargs)
+        return numerical_hess(func, ["logHs", "alpha", 'beta','lnA'], dx, **kwargs)
     else:
-        return numerical_jac(func, ["logHs", "alpha", 'beta'], dx, **kwargs)
+        return numerical_jac(func, ["logHs", "alpha", 'beta','lnA'], dx, **kwargs)
 
 
 def getq_jac(q, **kwargs):
     ia = IdealAnalytic(**kwargs)
-    return np.array([getattr(ia, q + "_%s"%x) for x in 'hab'])
+    return np.array([getattr(ia, q + "_%s"%x) for x in 'habA'])
 
 
 def getq_hess(q, **kwargs):
     ia = IdealAnalytic(**kwargs)
     return np.array(
-        [getattr(ia, q + "_%s_%s"%(x, y)) for x, y in ('hh', 'ha', 'hb', 'ha', 'aa', 'ab', 'hb', 'ab', 'bb')]).reshape(
-        (3, 3))
+        [getattr(ia, q + "_%s_%s"%(x, y)) for x, y in ('hh', 'ha', 'hb', 'hA', 'ha', 'aa',
+                                                       'ab','aA', 'hb', 'ab', 'bb','bA','hA',
+                                                       'aA','bA','AA')]).reshape((4,4))
 
 
 def get_frac_q_jh(q, dx=1e-4, hess=False, **kwargs):
@@ -86,36 +98,36 @@ def get_frac_q_jh(q, dx=1e-4, hess=False, **kwargs):
         anl = np.squeeze(getq_hess(q, **kwargs))
     else:
         anl = np.squeeze(getq_jac(q, **kwargs))
-    mask = np.logical_and(np.isclose(anl, 0, atol=dx), np.isclose(num, 0, atol=dx))
-    anl = np.where(mask, 1, anl)
+    #mask = np.logical_and(np.isclose(anl, 0, atol=dx), np.isclose(num, 0, atol=dx))
+    #anl = np.where(mask, 1, anl)
 
-    num = np.where(mask, 1, num)
-    return anl/num
+    #num = np.where(mask, 1, num)
+    return anl,num
 
 
 # ------------ TEST BASIC FUNCTIONS -----------------------------------------------
-def runq(q, hess, logHs, alpha, beta, logHsd, alphad, betad, scale):
-    res = get_frac_q_jh(q, hess=hess, log_mmin=mmin, logHs=logHs,
-                        alpha=alpha, beta=beta,logHsd=logHsd,
-                        alphad=alphad, betad=betad, scale=scale)
-    print res
-    assert np.all(np.isclose(res,1.0, rtol=1e-2))
+def runq(q, hess, logHs, alpha, beta, lnA, logHsd, alphad, betad, lnAd):
+    anl,num = get_frac_q_jh(q, hess=hess, log_mmin=mmin, logHs=logHs,
+                        alpha=alpha,lnA=lnA, beta=beta,logHsd=logHsd,
+                        alphad=alphad, betad=betad,lnAd=lnAd)
+    print anl,num
+    assert np.all(np.isclose(anl,num, rtol=1e-2,atol=1e-5))
 
 
 def test_basics():
-    for q in ["_lng", "_lnq", "_u"]:
+    for q in ["_lng", "_q", "_u"]:
         for hess in [False, True]:
-            for h, a, b, hd, ad, bd, s in trials:
-                yield runq, q, hess, h, a, b, hd, ad, bd, s
+            for h, a, b,lnA, hd, ad, bd,lnAd in trials:
+                yield runq, q, hess, h, a, b,lnA, hd, ad, bd, lnAd
 
 
 # ------------ TEST G - Q -----------------------------------------------
 def get_frac_gq_jh(dx=1e-4, hess=False, **kwargs):
-    num = ideal_numerical_jh("_lng", dx, hess, **kwargs) - ideal_numerical_jh("_lnq", dx, hess, **kwargs)
+    num = ideal_numerical_jh("_lng", dx, hess, **kwargs) - ideal_numerical_jh("_q", dx, hess, **kwargs)
     if hess:
-        anl = np.squeeze(getq_hess("_lng", **kwargs)) - np.squeeze(getq_hess("_lnq", **kwargs))
+        anl = np.squeeze(getq_hess("_lng", **kwargs)) - np.squeeze(getq_hess("_q", **kwargs))
     else:
-        anl = np.squeeze(getq_jac("_lng", **kwargs)) - np.squeeze(getq_jac("_lnq", **kwargs))
+        anl = np.squeeze(getq_jac("_lng", **kwargs)) - np.squeeze(getq_jac("_q", **kwargs))
 
     mask = np.logical_and(np.isclose(anl, 0, atol=dx), np.isclose(num, 0, atol=dx))
     anl = np.where(mask, 1, anl)
@@ -123,31 +135,31 @@ def get_frac_gq_jh(dx=1e-4, hess=False, **kwargs):
     return anl/num
 
 
-def rungq(hess, logHs, alpha, beta, logHsd, alphad, betad, scale):
+def rungq(hess, logHs, alpha, beta,lnA, logHsd, alphad, betad, lnAd):
     res = get_frac_gq_jh(hess=hess, log_mmin=mmin, logHs=logHs,
-                         alpha=alpha, beta=beta,logHsd=logHsd,
-                         alphad=alphad, betad=betad, scale=scale)
+                         alpha=alpha, beta=beta,lnA=lnA,logHsd=logHsd,
+                         alphad=alphad, betad=betad,lnAd=lnAd)
     print res
     assert np.all(np.isclose(res,1.0, rtol=1e-2))
 
 
 def test_gq():
     for hess in [False, True]:
-        for h, a, b, hd, ad, bd, s in trials:
-            yield rungq, hess, h, a, b, hd, ad, bd, s
+        for h, a, b, lnA,hd, ad, bd,lnAd, in trials:
+            yield rungq, hess, h, a, b,lnA, hd, ad, bd,lnAd
 
 
 # ------------ TEST G - Q - U -----------------------------------------------
 def get_frac_gqu_jh(dx=1e-4, hess=False, **kwargs):
-    num = ideal_numerical_jh("_lng", dx, hess, **kwargs) - ideal_numerical_jh("_lnq", dx, hess,
+    num = ideal_numerical_jh("_lng", dx, hess, **kwargs) - ideal_numerical_jh("_q", dx, hess,
                                                                               **kwargs) - ideal_numerical_jh("_u", dx,
                                                                                                              hess,
                                                                                                              **kwargs)
     if hess:
-        anl = np.squeeze(getq_hess("_lng", **kwargs)) - np.squeeze(getq_hess("_lnq", **kwargs)) - np.squeeze(
+        anl = np.squeeze(getq_hess("_lng", **kwargs)) - np.squeeze(getq_hess("_q", **kwargs)) - np.squeeze(
             getq_hess("_u", **kwargs))
     else:
-        anl = np.squeeze(getq_jac("_lng", **kwargs)) - np.squeeze(getq_jac("_lnq", **kwargs)) - np.squeeze(
+        anl = np.squeeze(getq_jac("_lng", **kwargs)) - np.squeeze(getq_jac("_q", **kwargs)) - np.squeeze(
             getq_jac("_u", **kwargs))
 
     mask = np.logical_and(np.isclose(anl, 0, atol=dx), np.isclose(num, 0, atol=dx))
@@ -156,30 +168,31 @@ def get_frac_gqu_jh(dx=1e-4, hess=False, **kwargs):
     return anl/num
 
 
-def rungqu(hess, logHs, alpha, beta, logHsd, alphad, betad, scale):
+def rungqu(hess, logHs, alpha, beta,lnA, logHsd, alphad, betad, lnAd):
     res = get_frac_gqu_jh(hess=hess, log_mmin=mmin, logHs=logHs,
-                          alpha=alpha, beta=beta,logHsd=logHsd,
-                          alphad=alphad, betad=betad, scale=scale)
+                          alpha=alpha, beta=beta,lnA=lnA,logHsd=logHsd,
+                          alphad=alphad, betad=betad, lnAd=lnAd)
     print res
     assert np.all(np.isclose(res,1.0, rtol=1e-2))
 
 
 def test_gqu():
     for hess in [False, True]:
-        for h, a, b, hd, ad, bd, s in trials:
-            yield rungqu, hess, h, a, b, hd, ad, bd, s
+        for h, a, b, lnA, hd, ad, bd,lnAd in trials:
+            yield rungqu, hess, h, a, b,lnA, hd, ad, bd,lnAd
 
 
 # ------------ TEST F -----------------------------------------------
 def getF_jac(**kwargs):
     ia = IdealAnalytic(**kwargs)
-    return np.array([ia._F_x(x) for x in 'hab'])
+    return np.array([ia._F_x(x) for x in 'habA'])
 
 
 def getF_hess(**kwargs):
     ia = IdealAnalytic(**kwargs)
-    return np.array([ia._F_x_y(x, y) for x, y in ('hh', 'ha', 'hb', 'ha', 'aa', 'ab', 'hb', 'ab', 'bb')]).reshape(
-        (3, 3))
+    return np.array([ia._F_x_y(x, y) for x, y in ('hh', 'ha', 'hb', 'hA', 'ha', 'aa',
+                                                       'ab','aA', 'hb', 'ab', 'bb','bA','hA','aA','bA','AA')]).reshape(
+        (4,4))
 
 
 def get_frac_F_jh(dx=1e-4, hess=False, **kwargs):
@@ -188,26 +201,31 @@ def get_frac_F_jh(dx=1e-4, hess=False, **kwargs):
         anl = np.squeeze(getF_hess(**kwargs))
     else:
         anl = np.squeeze(getF_jac(**kwargs))
-    mask = np.logical_and(np.isclose(anl, 0, atol=dx), np.isclose(num, 0, atol=dx))
-    anl = np.where(mask, 1, anl)
 
-    num = np.where(mask, 1, num)
-    return anl/num
+    return anl,num
 
 
-def runF(hess, logHs, alpha, beta, logHsd, alphad, betad, scale):
-    res = get_frac_F_jh(hess=hess, log_mmin=mmin, logHs=logHs,
-                        alpha=alpha, beta=beta,logHsd=logHsd,
-                        alphad=alphad, betad=betad, scale=scale)
-    print res
-    assert np.all(np.isclose(res,1.0, rtol=3e-2))
-
+def runF(hess, logHs, alpha, beta, lnA, logHsd, alphad, betad, lnAd):
+    global SMALL
+    anl,num = get_frac_F_jh(hess=hess, log_mmin=mmin, logHs=logHs,
+                        alpha=alpha, beta=beta,lnA=lnA,logHsd=logHsd,
+                        alphad=alphad, betad=betad,lnAd=lnAd)
+    print anl,num
+    if not SMALL:
+        assert np.all(np.isclose(anl,num, rtol=3e-2,atol=1e-5))
+    else: #In this case, we can't have dx small enough to get the Jacobian to zero at the solution in the numerical solution.
+        assert np.all(np.isclose(anl,num, rtol=3e-2,atol=10.0))
 
 def test_nablaF():
+    global SMALL
     for hess in [False, True]:
-        for h, a, b, hd, ad, bd, s in trials:
+        for h, a, b, lnA, hd, ad, bd, lnAd in trials:
             # The following fails at the moment, so continue
             if not hess and h==hd and a==ad and b==bd:
-                continue
+                # Change is REALLY FAST here, so need a smaller dx
+                SMALL=True
+            else:
+                SMALL=False
 
-            yield runF, hess, h, a, b, hd, ad, bd, s
+            yield runF, hess, h, a, b, lnA, hd, ad, bd, lnAd
+    SMALL=False

@@ -18,8 +18,7 @@ ln10 = np.log(10)
 
 class IdealAnalytic(lk.PerObjLike):
 
-    def __init__(self, V=200.0 ** 3,
-                 logHsd=None, alphad=None, betad=None,**kwargs):
+    def __init__(self,logHsd=None, alphad=None, betad=None,lnAd=None,**kwargs):
         """
         Subclass of :class:`PerObjLike`, defining the expected likelihood and covariance for a sample
         of variates drawn directly from an MRP distribution.
@@ -50,21 +49,24 @@ class IdealAnalytic(lk.PerObjLike):
             log_mmin = kwargs.pop("log_mmin")
 
         super(IdealAnalytic,self).__init__(logm=np.array([log_mmin]), log_mmin=log_mmin, **kwargs)
-        self.V = V
 
         # Set data parameters
         self.logHsd = logHsd or self.logHs
         self.alphad = alphad or self.alpha
         self.betad = betad or self.beta
-        self._alphad_s = self.alphad + self.scale
-
-        self._shape = [getattr(getattr(self, q), "__len__", None) for q in ["mmin", "logHs", "alpha", "beta", "scale"]]
+        self.lnAd = self.lnA if lnAd is None else lnAd
+        
+        self._shape = [getattr(getattr(self, q), "__len__", None) for q in ["mmin", "logHs", "alpha", "beta"]]
         while None in self._shape:
             self._shape.remove(None)
 
     @_cached
     def Hsd(self):
         return 10**self.logHsd
+
+    @_cached
+    def Ad(self):
+        return np.exp(self.lnAd)
 
     # ===========================================================================
     # Basic Unit Quantities
@@ -79,7 +81,7 @@ class IdealAnalytic(lk.PerObjLike):
 
     @_cached
     def _zd(self):
-        return (self._alphad_s+1)/self.betad
+        return (self.alphad+1)/self.betad
 
     # ===========================================================================
     # Cached special functions (data counterparts)
@@ -102,19 +104,19 @@ class IdealAnalytic(lk.PerObjLike):
 
     @_cached
     def G1d(self):
-        return sp.G1(self._zd,self._xd)
+        return self.Ad * self.Hsd * sp.G1(self._zd,self._xd)
 
     @_cached
     def G1d_p1(self):
-        return sp.G1(self._zd+self.beta/self.betad, self._xd)
+        return self.Ad * self.Hsd * sp.G1(self._zd+self.beta/self.betad, self._xd)
 
     @_cached
     def G2d(self):
-        return sp.G2(self._zd, self._xd)
+        return self.Ad * self.Hsd * sp.G2(self._zd, self._xd)
 
     @_cached
     def G2d_p1(self):
-        return sp.G2(self._zd+self.beta/self.betad,self._xd)
+        return self.Ad * self.Hsd * sp.G2(self._zd+self.beta/self.betad,self._xd)
 
     @_cached
     def _Gbard(self):
@@ -126,7 +128,7 @@ class IdealAnalytic(lk.PerObjLike):
 
     @_cached
     def _phid(self):
-        return self._yd*self._gd/self.gammainc_zxd
+        return self.mmin * self._gd
 
     # ===========================================================================
     # Basic MRP quantities
@@ -136,61 +138,81 @@ class IdealAnalytic(lk.PerObjLike):
         """
         The shape of the MRP, completely unnormalised (ie. A=1) (truncation mass)
         """
-        return core.mrp_shape(self.mmin, self.logHsd, self._alphad_s, self.betad)
+        return core.dndm(self.mmin, self.logHsd, self.alphad, self.betad,norm=self.Ad)
 
     @_cached
     def _qd(self):
         """
         The normalisation of the MRP (ie. integral of g) (truncation masses)
         """
-        return sp.gammainc(self._zd, self._xd)*self.Hsd
-
-    @_cached
-    def _qd_nos(self):
-        """
-        q for the data parameters, without scaling.
-        """
-        return sp.gammainc((self.alphad+1)/self.betad, self._xd)*self.Hsd
+        return sp.gammainc(self._zd, self._xd)*self.Hsd * self.Ad
+    #
+    # @_cached
+    # def _qd_nos(self):
+    #     """
+    #     q for the data parameters, without scaling.
+    #     """
+    #     return sp.gammainc((self.alphad+1)/self.betad, self._xd)*self.Hsd
 
     @_cached
     def _lngd(self):
         """
         Better log of g than log(g) (truncation mass)
         """
-        return core.ln_mrp_shape(self.mmin, self.logHsd, self._alphad_s, self.betad)
+        return core.ln_mrp_shape(self.mmin, self.logHsd, self.alphad, self.betad,log=True,norm=self.lnAd)
 
     # ===========================================================================
     # Basic likelihood
     # ===========================================================================
     @_cached
     def _t(self):
-        a = self._alpha_s
-        ad = self._alphad_s
+        a = self.alpha
+        ad = self.alphad
         zd = self._zd
         pg = sp.polygamma(0, zd)
-        return (a * self.Hsd / self.betad) * self._gammazd * (self._yd ** (ad + 1) * self._gammazd *
+        return np.exp(self.lnAd)*(a * self.Hsd / self.betad) * self._gammazd * (self._yd ** (ad + 1) * self._gammazd *
                                       sp.hyperReg_2F2(zd, self._xd) +
                                       pg - self.betad * np.log(self._yd))
 
     @_cached
     def _u(self):
         a = (self.Hsd / self.Hs) ** self.beta
-        b = self.Hsd * self.gammainc_z1xd
+        b = self.Ad*self.Hsd * self.gammainc_z1xd
         c = self._xd ** (self.beta / self.betad) * self._qd
         return a * (b - c)
 
     @_cached
     def _F(self):
-        return np.squeeze(self._qd * (self._lng - np.log(self._q)) + self._t - self._u)
+        return np.squeeze(-self._q + self._qd * self._lng + self._t - self._u)
 
     @_cached
     def lnL(self):
-        return self.V * np.exp(self.lnA) * (self._qd_nos / self._qd) * self._F
+        return self._F
 
     # ===========================================================================
     # Simple Derivatives
     # ===========================================================================
     #---------------u'() --------------------------------------------
+    @_cached
+    def _u_A(self):
+        return 0
+
+    @_cached
+    def _u_A_A(self):
+        return 0
+
+    @_cached
+    def _u_h_A(self):
+        return 0
+
+    @_cached
+    def _u_a_A(self):
+        return 0
+
+    @_cached
+    def _u_b_A(self):
+        return 0
+
     @_cached
     def _u_a(self):
         return 0
@@ -217,11 +239,14 @@ class IdealAnalytic(lk.PerObjLike):
 
     @_cached
     def _u_b(self):
-        a = np.log(self.Hsd / self.Hs) * self._u
-        b = (self.Hsd / self.Hs) ** self.beta
-        c = self._u * np.log(self._xd)/b
-        d = self.Hsd * self.gammainc_z1xd * self.G1d_p1
-        return a + b * ((1.0 / self.betad) * (c + d))
+        a = self._u * (np.log(self.Hsd/self.Hs) + np.log(self._xd)/self.betad)
+        b = (self.Hsd/self.Hs)**self.beta * self.G1d_p1/self.betad
+        return a+b
+        # a = np.log(self.Hsd / self.Hs) * self._u
+        # b = (self.Hsd / self.Hs) ** self.beta
+        # c = self._u * np.log(self._xd)/b
+        # d = np.exp(self.lnAd) * self.Hsd * self.gammainc_z1xd * self.G1d_p1
+        # return a + b * ((1.0 / self.betad) * (c + d))
 
     @_cached
     def _u_h_b(self):
@@ -229,20 +254,48 @@ class IdealAnalytic(lk.PerObjLike):
 
     @_cached
     def _u_b_b(self):
-        hfrac = self.Hsd/self.Hs
-        a = 1/self.betad
-        b = self._u_b*(self.betad*np.log(hfrac) + np.log(self._xd))
-        c = np.log(hfrac) * self.Hsd * self.G1d_p1 * self.gammainc_z1xd * hfrac**self.beta
-        d = self.Hsd * hfrac**self.beta * self.gammainc_z1xd * self._Gbard_p1/self.betad
+        hf = self.Hsd/self.Hs
+        hfb = hf**self.beta
 
-        return a*(b+c+d)
+        # a = self._u_b*(np.log(hf) + np.log(self._xd)/self.betad)
+        # b = np.log(hf) * hfb * self.G1d_p1/self.betad
+        # c =
+        a = np.log(hf) + np.log(self._xd)/self.betad
+        b = self._u_b + hfb * self.G1d_p1/self.betad
+        c = 2*hfb*self.G2d_p1/self.betad**2
+        return a*b + c
+        # a = 1/self.betad
+        # b = self._u_b*(self.betad*np.log(hfrac) + np.log(self._xd))
+        # c = np.log(hfrac) * self.Hsd * self.G1d_p1 * self.gammainc_z1xd * hfrac**self.beta
+        # d = self.Hsd * hfrac**self.beta * self.gammainc_z1xd * self._Gbard_p1/self.betad
+        #
+        # return a*(b+c+d)
 
 
     #---------------t'() --------------------------------------------
+    @_cached
+    def _t_A(self):
+        return 0
+
+    @_cached
+    def _t_A_A(self):
+        return 0
+
+    @_cached
+    def _t_h_A(self):
+        return 0
+
+    @_cached
+    def _t_a_A(self):
+        return 0
+
+    @_cached
+    def _t_b_A(self):
+        return 0
 
     @_cached
     def _t_a(self):
-        return self._t / self._alpha_s
+        return self._t / self.alpha
 
     @_cached
     def _t_a_a(self):
@@ -285,11 +338,11 @@ class IdealAnalytic(lk.PerObjLike):
         Derivatives of Q w.r.t x
         """
         gx = getattr(self, "_lng_%s"%x)
-        qx = getattr(self, "_lnq_%s"%x)
+        qx = getattr(self, "_q_%s"%x)
         ux = getattr(self,"_u_%s"%x)
         tx = getattr(self,"_t_%s"%x)
 
-        return self._qd*(gx - qx) +tx - ux
+        return self._qd*gx +tx - ux - qx
 
     def _F_x_y(self, x, y):
         """
@@ -299,10 +352,24 @@ class IdealAnalytic(lk.PerObjLike):
             x, y = y, x
 
         lngxy = getattr(self, "_lng_%s_%s"%(x, y))
-        lnqxy = getattr(self, "_lnq_%s_%s"%(x, y))
+        qxy = getattr(self, "_q_%s_%s"%(x, y))
         uxy = getattr(self,"_u_%s_%s"%(x,y))
 
-        return self._qd * (lngxy - lnqxy) - uxy
+        return self._qd * lngxy  - uxy - qxy
+
+    @_cached
+    def jacobian(self):
+        h = self._F_x("h")
+        a = self._F_x("a")
+        b = self._F_x("b")
+        A = self._F_x("A")
+
+        if self._shape:
+            x = np.array([np.array([h[i], a[i], b[i],A[i]]
+                                   ) for i in range(len(h))]).T
+        else:
+            x = np.array([h, a, b,A])
+        return np.squeeze(x)
 
     @_cached
     def hessian(self):
@@ -312,19 +379,21 @@ class IdealAnalytic(lk.PerObjLike):
         aa = self._F_x_y("a", "a")
         ab = self._F_x_y("a", "b")
         bb = self._F_x_y("b", "b")
-        A = self.V * np.exp(self.lnA) * (self._qd_nos / self._qd)
-        if self._shape and not hasattr(A,"__len__"):
-            x = A * np.array([np.array([[hh[i], ha[i], hb[i]],
-                                      [ha[i], aa[i], ab[i]],
-                                      [hb[i], ab[i], bb[i]]]) for i in range(len(hh))]).T
-        elif self._shape and hasattr(A,"__len__"):
-            x = np.array([A[i] * np.array([[hh[i], ha[i], hb[i]],
-                                         [ha[i], aa[i], ab[i]],
-                                         [hb[i], ab[i], bb[i]]]) for i in range(len(hh))]).T
+        hA = self._F_x_y("h", "A")
+        aA = self._F_x_y("a", "A")
+        bA = self._F_x_y("b", "A")
+        AA = self._F_x_y("A", "A")
+
+        if self._shape:
+            x = np.array([np.array([[hh[i], ha[i], hb[i], hA[i]],
+                                    [ha[i], aa[i], ab[i], aA[i]],
+                                    [hb[i], ab[i], bb[i], bA[i]],
+                                    [hA[i], aA[i], bA[i], AA[i]]]) for i in range(len(hh))]).T
         else:
-            x = A * np.array([[hh, ha, hb],
-                              [ha, aa, ab],
-                              [hb, ab, bb]])
+            x = np.array([[hh, ha, hb, hA],
+                          [ha, aa, ab, aA],
+                          [hb, ab, bb, bA],
+                          [hA, aA, bA, AA]])
         return np.squeeze(x)
 
     @_cached
