@@ -731,19 +731,19 @@ functions {
       if(a>=0) return gamma_q(a,x) * tgamma(a);
       if(a< -10) reject("a in gammainc(a,x) should not be less than -10 or memory gets ridiculous, have a = ", a);
 
-      ap1 <- a+1;
+      ap1 = a+1;
 
       //Get floor(-a)
-      n<-0;
-      while(n<-a){
-        n <- n+1;
+      n=0;
+      while(n=a){
+        n = n+1;
       }
 
       //Get summed part
       {
         vector[n] sums;
-        for(i in 0:n-1) sums[i+1] <- pow(x,i)/tgamma(ap1+i);
-        ssum <- sum(sums);
+        for(i in 0:n-1) sums[i+1] = pow(x,i)/tgamma(ap1+i);
+        ssum = sum(sums);
       }
       return tgamma(a)*(gamma_q(a+n,x)-pow(x,a)*exp(-x)*ssum);
     }
@@ -759,7 +759,7 @@ functions {
     real truncated_logGGD_log(vector y, real h, real alpha, real beta, real lnA, real gzx){
         vector[num_elements(y)] x;
 
-        x <- exp(log10()*y*beta);
+        x = exp(log10()*y*beta);
         return sum(lnA + log(beta) + log(log10()) + log10()*h + log10()*y*(alpha+1) - x) - exp(lnA)*pow(10,h)*gzx;
     }
 }
@@ -781,7 +781,7 @@ data {
 
 transformed data {
     real<lower=0> log_mmin;
-    log_mmin <- min(log_m);
+    log_mmin = min(log_m);
 }
 """
 
@@ -793,15 +793,6 @@ _with_errors_data = re.sub(r"(//Priors\n)", r"\1    real log_mmin_prior[2];\n",_
 # Create single-error (potentially forced) variant.
 _with_error_data = _with_errors_data.replace("vector<lower=0>[N] sd_dex;","real<lower=0> sd_dex;")
 
-# _with_errors_data = """
-# data {
-#     int<lower=0> N;                // number of halos
-#     vector[N] log_m_meas;          // measured halo masses
-#     vector<lower=0>[N] sd_dex;     // uncertainty in halo masses (dex)
-#     real<lower=0> V;               // Volume of the survey
-#     int<lower=0> verbose;          // Whether the run should be verbose or not.
-# }
-# """
 
 _simple_params = """
 parameters {
@@ -815,8 +806,8 @@ transformed parameters {
     real raw_lnA;
     real gzx;
 
-    gzx <- gammainc((alpha+1)/beta,exp(log10()*(log_mmin-logHs)*beta));
-    raw_lnA <- lnA + log(V);
+    gzx = gammainc((alpha+1)/beta,exp(log10()*(log_mmin-logHs)*beta));
+    raw_lnA = lnA + log(V);
 }
 """
 
@@ -827,68 +818,25 @@ _with_errors_params = re.sub("\n}","""
 }
 """, _simple_params,count=1)
 
-# _with_errors_params_mmin = """
-# parameters {
-#     real logHs;                          // Characteristic halo mass
-#     real alpha;                          // Power-law slope
-#     real<lower=0> beta;                  // Cut-off parameter
-#     real lnA;                            // Normalisation
-#     real log_mmin;                       // Truncation mass
-#     vector<lower=log_mmin>[N] log_mtrue; // True mass estimates
-# }
-#
-# transformed parameters {
-#     real raw_lnA;
-#     real gzx;
-#
-#     gzx <- gammainc((alpha+1)/beta,exp(log10()*(log_mmin-logHs)*beta));
-#     raw_lnA <- lnA + log(V);
-# }
-# """
-
 # Create pdf-version of the parameters
 _with_errors_params_pdf = re.sub(".*real lnA.*","",_with_errors_params)
 _with_errors_params_pdf = re.sub(r"(transformed parameters \{.*\n)",r"\1    real lnA;\n",_with_errors_params_pdf)
 #lst.insert(lst.index("transformed parameters {")+1,"    real lnA;")
 
 _with_errors_params_pdf = re.sub("raw_lnA.*lnA.*;","""
-raw_lnA <- log(N) - log10()*logHs - log(gzx);
+raw_lnA = log(N) - log10()*logHs - log(gzx);
     lnA = raw_lnA - log(V);
 """,_with_errors_params_pdf)
-
-#lst.insert(-2,"    lnA = raw_lnA - log(V);")
-#print lst
-#_with_errors_params_pdf = "\n".join(lst)
-
-# _with_errors_params_mmin_pdf = """
-# parameters {
-#     real logHs;                          // Characteristic halo mass
-#     real alpha;                          // Power-law slope
-#     real<lower=0> beta;                  // Cut-off parameter
-#     real log_mmin;                       // Truncation mass
-#     vector<lower=log_mmin>[N] log_mtrue; // True mass estimates
-# }
-#
-# transformed parameters {
-#     real lnA;
-#     real raw_lnA;
-#     real gzx;
-#
-#     gzx <- gammainc((alpha+1)/beta,exp(log10()*(log_mmin-logHs)*beta));
-#     raw_lnA <- log(N) - log10()*logHs - log(gzx);
-#     lnA <- raw_lnA - log(V);
-# }
-# """
 
 _simple_model = """
 model {
     vector[N] y;
-    y <- log_m-logHs;
+    y = log_m-logHs;
 
     // Priors
     logHs ~ normal(logHs_prior[1],logHs_prior[2]);
     alpha ~ normal(alpha_prior[1],alpha_prior[2]);
-    beta ~ cauchy(beta_prior[1],beta_prior[2])T[0,];
+    beta ~ normal(beta_prior[1],beta_prior[2])T[0,];
     lnA ~ normal(lnA_prior[1],lnA_prior[2]);
 
     y ~ truncated_logGGD(logHs, alpha, beta, raw_lnA, gzx);
@@ -896,7 +844,8 @@ model {
 """
 
 # Add in measured prior bit.
-_with_errors_model = re.sub("(.*)\n(.*)(y ~)",r"\2log_mmin ~ normal(log_mmin_prior[1],log_mmin_prior[2]);\n\n\2\3",_simple_model)
+_with_errors_model = re.sub(r"y(.*)log_m",r"y\1log_mest",_simple_model)  # Change log_m to log_m_est
+_with_errors_model = re.sub("(.*)\n(.*)(y ~)",r"\2log_mmin ~ normal(log_mmin_prior[1],log_mmin_prior[2]);\n\n\2\3",_with_errors_model)
 _with_errors_model = re.sub("}","    log_m ~ normal(log_mest,sd_dex);\n}",_with_errors_model)
 
 # """
@@ -904,7 +853,7 @@ _with_errors_model = re.sub("}","    log_m ~ normal(log_mest,sd_dex);\n}",_with_
 #     vector[N] y;
 #
 #
-#     y <- log_mtrue-logHs;
+#     y = log_mtrue-logHs;
 #     y ~ truncated_logGGD(logHs, alpha, beta, raw_lnA, gzx);
 #     log_m_meas ~ normal(log_mtrue,sd_dex);
 # }
@@ -1037,6 +986,7 @@ def fit_perobj_stan(logm, V=1, sd_dex=None, warmup=None, iter=1000,
                      "log_mmin_prior":log_mmin_prior,
                      "verbose":int(verbose)}
 
+    print "Data for stan: ", stan_data
     if model is None:
         model = _compile_model(False if sd_dex is None else True, np.isscalar(sd_dex),use_pdf_lnl)
 
