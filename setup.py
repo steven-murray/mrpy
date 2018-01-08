@@ -30,11 +30,12 @@ if sys.argv[-1] == "publish":
 setup(
     name="mrpy",
     version=find_version("mrpy", "__init__.py"),
-    packages=['mrpy'],
+    packages=find_packages(),#['mrpy','mrpy.fitting','mrpy.base','mrpy.extra','mrpy.fitting.stan'],
     install_requires=["numpy>=1.6.2",
                       "scipy>=0.12.0",
                       "mpmath",
                       "cached_property"],
+    # package_data= {"mrpy.fitting.stan":['mrpy/fitting/stan/stan_models/*']},
     #scripts=[],
     author="Steven Murray",
     author_email="steven.murray@curtin.edu.au",

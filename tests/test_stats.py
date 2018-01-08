@@ -1,8 +1,18 @@
 """
 Basic tests of the statistics.
 """
+import inspect
+import os
 
-from mrpy.stats import TGGD, TGGDlog, TGGDln
+import numpy as np
+
+LOCATION = "/".join(os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe()))).split("/")[:-1])
+# from nose.tools import raises
+import sys
+sys.path.insert(0, LOCATION)
+
+
+from mrpy.base.stats import TGGD, TGGDlog, TGGDln
 import numpy as np
 from scipy.integrate import quad
 from scipy.stats import skew, kurtosis

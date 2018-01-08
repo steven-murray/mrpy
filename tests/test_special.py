@@ -15,7 +15,7 @@ sys.path.insert(0, LOCATION)
 
 from nose.tools import assert_raises
 
-from mrpy import special as s
+from mrpy.base import special as s
 
 
 #===========================================================================

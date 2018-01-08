@@ -1,14 +1,18 @@
-import numpy as np
 import inspect
 import os
+
+import numpy as np
+
 LOCATION = "/".join(os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe()))).split("/")[:-1])
 # from nose.tools import raises
 import sys
 sys.path.insert(0, LOCATION)
 from scipy.integrate import simps
 rd = np.random.random
-from mrpy import core, stats
+from mrpy.base import core
+from mrpy.base import stats
 from scipy.interpolate import InterpolatedUnivariateSpline as spline
+
 
 def test_pdf_inf():
     """
@@ -34,11 +38,12 @@ def test_pdf_inf():
 #         print err
 #         assert np.abs(ans-1) < 1e-4
 
+
 def test_Arhoc():
     # Try A_rhoc
     m = np.logspace(0,17,2000)
     for i in range(100):
-        ans =  simps(core.dndm(m,3*rd()+10,-1.5,0.5*rd()+0.5,norm="rhoc",Om0=0.3)*m,m)/(0.3*2.7755e11)
+        ans =  simps(core.dndm(m,3*rd()+10,-1.5,0.5*rd()+0.5,norm="rhom")*m,m)/(0.3*2.7755e11)
         err = np.abs(ans-1)
         print err
         assert np.abs(ans-1) < 1e-4
@@ -55,7 +60,7 @@ def test_ngtm_pdf():
 def test_log_mass_mode():
     lmm = core.log_mass_mode(14.0,-1.8,0.7)
     m = np.linspace(np.log10(lmm)-1,np.log10(lmm)+1,200)
-    mrp = stats.TGGDlog(14.0,-1.8+1,0.7,m[0]).pdf(m,log=True)
+    mrp = stats.TGGDlog(14.0, -1.8 + 1, 0.7, m[0]).pdf(m, log=True)
     s = spline(m,mrp,k=4)
     assert np.isclose(lmm,10**s.derivative().roots())
 
@@ -88,21 +93,21 @@ class TestMRP(object):
 
     def test_arhoc(self):
         logm = np.linspace(0,16,1000)
-        mrp = core.MRP(logm,14.0,-1.85,0.75,norm="rhoc")
+        mrp = core.MRP(logm,14.0,-1.85,0.75,norm="rhom")
         print mrp.rhobar/(0.3*2.7755e11)
         assert np.isclose(mrp.rhobar,0.3*2.7755e11,rtol=0.05)
 
 
     def test_arhoc_general_m(self):
         logm = np.linspace(10,16,1000)
-        mrp = core.MRP(logm,14.0,-1.85,0.75,norm="rhoc",log_mmin=0.0)
+        mrp = core.MRP(logm,14.0,-1.85,0.75,norm="rhom",log_mmin=0.0)
         print mrp.rhobar/(0.3*2.7755e11)
         assert np.isclose(mrp.rhobar,0.3*2.7755e11,rtol=0.05)
 
     def test_lmm(self):
         lmm = self.mrp.log_mass_mode
         m = np.linspace(np.log10(lmm)-1,np.log10(lmm)+1,200)
-        mrp = stats.TGGDlog(14.0,-1.9+1,0.75,m[0]).pdf(m,log=True)
+        mrp = stats.TGGDlog(14.0, -1.9 + 1, 0.75, m[0]).pdf(m, log=True)
         s = spline(m,mrp,k=4)
         assert np.isclose(lmm,10**s.derivative().roots())
 

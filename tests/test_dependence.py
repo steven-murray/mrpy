@@ -6,8 +6,17 @@ Test `physical_dependence` module.
 # Perhaps for now, we'll just run things through to make sure they don't error or give
 # something completely stupid.
 
-from mrpy.physical_dependence import mrp_b13
+import inspect
+import os
+
 import numpy as np
+
+LOCATION = "/".join(os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe()))).split("/")[:-1])
+# from nose.tools import raises
+import sys
+sys.path.insert(0, LOCATION)
+from mrpy.extra.physical_dependence import mrp_b13
+
 
 def test_phys():
     m = np.logspace(10,15,200)

@@ -10,8 +10,8 @@ LOCATION = "/".join(os.path.dirname(os.path.abspath(inspect.getfile(inspect.curr
 # from nose.tools import raises
 sys.path.insert(0, LOCATION)
 
-from mrpy.analytic_model import IdealAnalytic
-from mrpy.likelihoods import PerObjLike
+from mrpy.extra.analytic_model import IdealAnalytic
+from mrpy.extra.likelihoods import SampleLike
 from mrpy._utils import numerical_hess, numerical_jac
 import numpy as np
 from scipy.integrate import simps
@@ -42,8 +42,8 @@ def numerical_F(alpha, beta, logHs, lnA, alphad=None, betad=None, logHsd=None,ln
     lnAd = lnAd or lnA
 
     m = np.logspace(mmin, 18, 1000)
-    mrp = PerObjLike(logm=np.log10(m), logHs=logHs, alpha=alpha, beta=beta, lnA=lnA)
-    mrpd = PerObjLike(logm=np.log10(m), logHs=logHsd, alpha=alphad, beta=betad,lnA = lnAd)
+    mrp = SampleLike(logm=np.log10(m), logHs=logHs, alpha=alpha, beta=beta, lnA=lnA)
+    mrpd = SampleLike(logm=np.log10(m), logHs=logHsd, alpha=alphad, beta=betad, lnA = lnAd)
     integ = mrpd.dndm()*np.log(mrp.dndm())
     return simps(integ, m) - mrp.nbar
 
