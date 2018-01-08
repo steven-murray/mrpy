@@ -9,10 +9,8 @@ definition of the likelihood involved in the fits within this module see
 This module also provides pre-defined prior functions, specifically, the ``normal_prior``.
 """
 
-from itertools import product
 import numpy as np
 import scipy.optimize as opt
-from mrpy.base.special import gammainc
 from scipy.stats import truncnorm
 
 import mrpy.extra.likelihoods as lk
@@ -31,8 +29,11 @@ def _retarg(ll, jac, ret_jac):
 
 
 # Define the likelihood function
-def _lnl(p, m, nm, mmin, V,  bounds, prior_func=None, prior_kwargs={},debug=0, ret_jac=False):
+def _lnl(p, m, nm, mmin, V,  bounds, prior_func=None, prior_kwargs=None,debug=0, ret_jac=False):
     ## Note m,nm, mmin are always interpreted as being a list of arrays/scalars
+
+    if prior_kwargs is None:
+        prior_kwargs = {}
 
     # Some absolute bounds
     if p[2] < 0 or p[0] < 0 :
@@ -41,8 +42,8 @@ def _lnl(p, m, nm, mmin, V,  bounds, prior_func=None, prior_kwargs={},debug=0, r
         return _retarg(-np.inf, np.inf, ret_jac)
 
     # Enforced bounds
-    for i in range(len(p)):
-        if not bounds[i][0] <= p[i] <= bounds[i][1]:
+    for i,pp in enumerate(p):
+        if not bounds[i][0] <= pp <= bounds[i][1]:
             if debug > 0:
                 print("parameter out of bounds: ", p, bounds)
             return _retarg(-np.inf, np.inf, ret_jac)
@@ -167,7 +168,10 @@ class SimFit(object):
     def __init__(self, m, nm=None, mmin=None,V=1.0,
                  hs_bounds=(10, 16), alpha_bounds=(-1.99, -1.3),
                  beta_bounds=(0.1, 2.0), lnA_bounds = (-40,-10),
-                 prior_func=None,prior_kwargs={}):
+                 prior_func=None,prior_kwargs=None):
+
+        if prior_kwargs is None:
+            prior_kwargs = {}
 
         self._determine_suite(m, nm, mmin,V)
 
@@ -306,7 +310,8 @@ class SimFit(object):
     # =========================================================================================
     # EMCEE BASED ROUTINES
     # =========================================================================================
-    def _get_cuts(self, bound, mu, sigma):
+    @staticmethod
+    def _get_cuts(bound, mu, sigma):
         return (bound - mu)/sigma
 
     def _get_initial_ball(self, guess, bounds, chains):
@@ -330,7 +335,7 @@ class SimFit(object):
 
     def run_mcmc(self, nchains=50, warmup=1000, iterations=1000,
                  hs0=14.5, alpha0=-1.9, beta0=0.8, lnA0=-26.0, logm0 = None, debug=0,
-                 opt_init=False, opt_kw={}, chainfile="chain.dat", save_latent = True,
+                 opt_init=False, opt_kw=None, chainfile="chain.dat", save_latent = True,
                  **kwargs):
         """
         Per-object MCMC fit for masses `m`, using the `emcee` package.
@@ -389,6 +394,9 @@ class SimFit(object):
         >>> mcmc_res = FitObj.run_mcmc(nchains=10,warmup=100,iterations=100)
         >>> print mcmc_res.flatchain.mean(axis=0)
         """
+        if opt_kw is None:
+            opt_kw = {}
+
         # First, set guess, either by optimization or passed values
         guess = np.array([hs0,alpha0,beta0,lnA0])
         bounds = [self.hs_bounds, self.alpha_bounds, self.beta_bounds,self.lnA_bounds]
@@ -412,7 +420,7 @@ class SimFit(object):
                                                     self.prior_func, self.prior_kwargs,
                                                     debug, False), **kwargs)
         if warmup:
-            initial, lnprob, rstate = self.mcmc_res.run_mcmc(initial, warmup, storechain=False)
+            initial, _, rstate = self.mcmc_res.run_mcmc(initial, warmup, storechain=False)
             self.mcmc_res.reset()
 
 

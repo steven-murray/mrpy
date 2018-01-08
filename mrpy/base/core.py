@@ -220,7 +220,7 @@ def rho_gtm(m, logHs, alpha, beta, mmin=None, norm="pdf", log=False, **Arhom_kw)
 
     %s
     """
-    t, A = _head(m, logHs, alpha, beta, mmin, norm, log, **Arhom_kw)
+    _, A = _head(m, logHs, alpha, beta, mmin, norm, log, **Arhom_kw)
     shape = 10 ** (2 * logHs) * sp.gammainc((alpha + 2) / beta, (m / 10 ** logHs) ** beta)
     if log:
         shape = np.log(shape)
@@ -270,7 +270,7 @@ class MRP(object):
         else:
             try:
                 self.log_mmin = logm.min()
-            except:
+            except AttributeError:
                 self.log_mmin = logm
 
         self.logHs = logHs

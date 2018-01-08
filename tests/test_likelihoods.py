@@ -11,7 +11,6 @@ from mrpy.extra.likelihoods import SampleLike, CurveLike, SampleLikeWeights
 from mrpy._utils import numerical_hess, numerical_jac
 import numpy as np
 from mrpy.base.core import dndm
-from scipy.integrate import simps
 
 
 # HELPER FUNCTIONS

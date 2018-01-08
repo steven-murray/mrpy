@@ -854,7 +854,6 @@ class CurveLike(SampleLike):
     @_cached
     def _simple_sum(self):
         data = np.sum(self._delta_data/self.sig_data**2)
-        integ = 0
         rhom = 0
 
         if self.sig_rhomean != 0:
@@ -960,14 +959,14 @@ class CurveLike(SampleLike):
             ## the following seems right, but doesn't give correct results in tests. More work needed...
 
             # data term first
-            grad3_delta = np.sum((self._fdata_jac.T - self._frho_jac)/self.sig_data**2, axis=0)
-            t1 = np.outer(grad3_delta, grad3_delta)
-            t2 = np.sum(self._delta_data*(self._lng_hess.T - self._lnk_hess).T/self.sig_data**2, axis=-1)
-            errd = t1 + t2
-
-            erri = 0
-
-            return -(errd + erri)
+            # grad3_delta = np.sum((self._fdata_jac.T - self._frho_jac)/self.sig_data**2, axis=0)
+            # t1 = np.outer(grad3_delta, grad3_delta)
+            # t2 = np.sum(self._delta_data*(self._lng_hess.T - self._lnk_hess).T/self.sig_data**2, axis=-1)
+            # errd = t1 + t2
+            #
+            # erri = 0
+            #
+            # return -(errd + erri)
 
 
         else:

@@ -4,8 +4,6 @@ Basic tests of the statistics.
 import inspect
 import os
 
-import numpy as np
-
 LOCATION = "/".join(os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe()))).split("/")[:-1])
 # from nose.tools import raises
 import sys

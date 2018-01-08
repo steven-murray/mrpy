@@ -140,7 +140,8 @@ class TGGD(object):
         else:
             return np.log(a)
 
-    def _cdf_convert(self, p, lt, lg):
+    @staticmethod
+    def _cdf_convert(p, lt, lg):
         if lt:
             if lg:
                 p = np.log1p(-p)
@@ -151,7 +152,8 @@ class TGGD(object):
                 p = np.log(p)
         return p
 
-    def _q_convert(self, p, lin_cdf, log_cdf, logm, log_p):
+    @staticmethod
+    def _q_convert(p, lin_cdf, log_cdf, logm, log_p):
         lin_icdf = _spline(lin_cdf, logm[:len(lin_cdf)])
         # the log-space icdf must be done in double log space.
         log_icdf = _spline(np.log(-log_cdf)[::-1], logm[-len(log_cdf):][::-1])

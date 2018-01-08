@@ -15,7 +15,6 @@ arbitrary transformations. See the docs for :class:`ReparameteriseMRP` for more
 details.
 """
 
-from cached_property import cached_property as _cached
 from mrpy.base import core
 from . import likelihoods as lk
 import numpy as np
