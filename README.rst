@@ -4,6 +4,8 @@ mrpy
 		:target: https://travis-ci.org/steven-murray/mrpy
 .. image:: https://coveralls.io/repos/steven-murray/mrpy/badge.svg?branch=master&service=github
         :target: https://coveralls.io/github/steven-murray/mrpy?branch=master
+.. image:: https://api.codacy.com/project/badge/Grade/e5d5d9b72d024bd09e24ea833745c6da
+        :target: https://www.codacy.com/app/steven-murray/mrpy?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=steven-murray/mrpy&amp;utm_campaign=Badge_Grade
 
 A Python package for calculations with the MRP parameterisation of the Halo Mass Function.
 

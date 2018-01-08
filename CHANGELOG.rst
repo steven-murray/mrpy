@@ -4,9 +4,11 @@ Changelog
 Development Version
 -------------------
 
-Enhancements
-++++++++++++
-- New "getting started" example.
+v1.1.0 [8th Jan 2018]
+---------------------
+This version is the version used for all plots in Murray, Robotham, Power (2018), and is released along with that paper.
+There are many changes in the code from previous versions, the result of a couple of years of sporadic work.
+
 
 v1.0.0
 ------
