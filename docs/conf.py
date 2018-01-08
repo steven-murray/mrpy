@@ -42,7 +42,7 @@ extensions = [
     'IPython.sphinxext.ipython_console_highlighting'  # Ensures syntax highlighting works in notebooks (workaround)
 ]
 
-autosummary_generate = "api",
+autosummary_generate = True
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['templates']
@@ -60,7 +60,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'mrpy'
-copyright = u'2015-2016, Steven Murray'
+copyright = u'2015-2018, Steven Murray'
 author = u'Steven Murray'
 
 # The version info for the project you're documenting, acts as replacement for

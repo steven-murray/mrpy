@@ -157,12 +157,6 @@ class SimFit(object):
     -----
     Use as stringent bounds as possible, since the algorithm explores the
     edges, which can induce numerical error if values far from the solution are chosen.
-
-    The setting of `weight_scale` can be tricky. It is sometimes necessary to set it higher than 0
-    to achieve reasonable precision on `beta`, due to the severe relative lack of high-value
-    variates. Nevertheless, doing so in general decreases the reliability of the fit. Simple
-    tests show that in typical cases, about 10 times as many variates are required for
-    a ``weight_scale=1`` fit to achieve the same accuracy on parameters.
     """
 
     def __init__(self, m, nm=None, mmin=None,V=1.0,
@@ -420,7 +414,7 @@ class SimFit(object):
                                                     self.prior_func, self.prior_kwargs,
                                                     debug, False), **kwargs)
         if warmup:
-            initial, _, rstate = self.mcmc_res.run_mcmc(initial, warmup, storechain=False)
+            initial, _, _ = self.mcmc_res.run_mcmc(initial, warmup, storechain=False)
             self.mcmc_res.reset()
 
 

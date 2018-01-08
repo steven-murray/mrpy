@@ -11,12 +11,12 @@ the API documentation for each object.
 .. toctree::
    :maxdepth: 2
 
-   _exampledoc/getting_started
-   _exampledoc/fit_curve_against_analytic
-   _exampledoc/fit_simulation_suite
-   _exampledoc/explore_analytic_model
-   _exampledoc/physical_dependence
-   _exampledoc/reparameterization_performance
-   _exampledoc/SMHM
-   _exampledoc/double_schechter_gsmf
+   examples/getting_started
+   examples/fit_curve_against_analytic
+   examples/fit_simulation_suite
+   examples/explore_analytic_model
+   examples/physical_dependence
+   examples/reparameterization_performance
+   examples/SMHM
+   examples/double_schechter_gsmf
 
