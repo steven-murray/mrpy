@@ -14,9 +14,7 @@ the API documentation for each object.
    _exampledoc/getting_started
    _exampledoc/fit_curve_against_analytic
    _exampledoc/fit_simulation_suite
-   _exampledoc/heirarchical_model_stan
    _exampledoc/explore_analytic_model
-   _exampledoc/mmin_dependence
    _exampledoc/physical_dependence
    _exampledoc/reparameterization_performance
    _exampledoc/SMHM

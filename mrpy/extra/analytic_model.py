@@ -20,7 +20,7 @@ class IdealAnalytic(lk.SampleLike):
 
     def __init__(self,logHsd=None, alphad=None, betad=None,lnAd=None,**kwargs):
         """
-        Subclass of :class:`PerObjLike`, defining the expected likelihood and covariance for a sample
+        Subclass of :class:`~mrpy.extra.likelihoods.SampleLike`, defining the expected likelihood and covariance for a sample
         of variates drawn directly from an MRP distribution.
 
         See Murray, Robotham, Power (2016) for details.
@@ -31,9 +31,6 @@ class IdealAnalytic(lk.SampleLike):
 
         Parameters
         ----------
-        V : float, optional
-            The volume of the sample, in inverse units to the normalisation, A.
-
         logHsd, alphad, betad : float, optional
             Values of the MRP parameters for the *data*. If not given, they are set to the
             corresponding values of the variable parameters (i.e. the solution).

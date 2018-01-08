@@ -50,9 +50,9 @@ With `mrpy` you can:
   for generating normalisations.
 - Generate the MRP-based halo mass function as a function of physical parameters via the `mrp_b13` function.
 - Fit MRP parameters to data in the form of arbitrary curves with the `get_fit_curve` function.
-- Fit MRP parameters to data in the form of a sample of variates with the `PerObjFit` class: simulation data is supported
+- Fit MRP parameters to data in the form of a sample of variates with the `SimFit` class: simulation data is supported
   with extra efficiency, simulation suites fitted simultaneously is also supported, arbitrary priors on parameters,
-  log-normal uncertainties on variates supported through a Stan-based routine.
+  log-normal uncertainties on variates supported.
 - Calculate analytic hessians, jacobians at any point (including the solution of a fit).
 - Use alternate parameterisations of the same form via the `reparameterise` module.
 - Work with a special entirely analytic model to understand the effects of various parameters in the `analytic_model` module.
