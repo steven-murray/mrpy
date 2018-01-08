@@ -19,6 +19,4 @@ the API documentation for each object.
    _exampledoc/reparameterization_performance
    _exampledoc/SMHM
    _exampledoc/double_schechter_gsmf
-   _exampledoc/test_performance_against_EPS
-
 

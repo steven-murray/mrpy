@@ -4,12 +4,12 @@ API Summary
    :toctree: _autosummary
    :template: modules.rst
 
-   mrpy.special
-   mrpy.stats
-   mrpy.core
-   mrpy.physical_dependence
-   mrpy.likelihoods
-   mrpy.analytic_model
-   mrpy.fit_curve
-   mrpy.fit_perobj
-   mrpy.reparameterise
+   mrpy.base.special
+   mrpy.base.stats
+   mrpy.base.core
+   mrpy.extra.physical_dependence
+   mrpy.extra.likelihoods
+   mrpy.extra.analytic_model
+   mrpy.extra.reparameterise
+   mrpy.fitting.fit_curve
+   mrpy.fitting.fit_sample
