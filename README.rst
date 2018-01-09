@@ -9,7 +9,12 @@ mrpy
 
 A Python package for calculations with the MRP parameterisation of the Halo Mass Function.
 
-See Murray, Robotham, Power 2016 (in prep.) for more details on what the MRP is.
+See Murray, Robotham, Power (2018) for more details on what the MRP is.
+
+
+Documentation
++++++++++++++
+`Read the docs <http://mrpy.readthedocs.org>`_.
 
 
 Quick Start
@@ -17,30 +22,18 @@ Quick Start
 
 Installation
 ++++++++++++
-Required packages are `numpy`, `scipy`, `mpmath` (for incomplete gamma functions),
-and `cached_property`.
-These should be automatically installed when installing `mrpy`.
+``>> pip install mrpy``.
 
-To use the MCMC fitting features, `emcee` and `pystan` are needed. These are *not*
-installed automatically.
+This should install the required dependencies automatically.
 
-The simplest way to install is ``pip install mrpy``. This should install the required
-dependencies automatically.
+Note, to use the MCMC fitting features, `emcee` is needed. This is *not* installed automatically.
 
 To get the bleeding edge, use ``pip install git+git://github.com/steven-murray/mrpy.git``.
-
-If for some reason ``pip`` is not an option, manually download the github
-repo and use ``python setup.py install``.
 
 Getting Started
 +++++++++++++++
 There's a lot of things that you can do with `mrpy`. What you require will depend on the problem at hand. We recommend
 looking at some of the examples, and the API itself for how to use the code.
-
-Documentation
-+++++++++++++
-`Read the docs <http://mrpy.readthedocs.org>`_.
-
 
 Features
 --------
@@ -63,3 +56,9 @@ Examples
 --------
 There are several examples featured in the ``docs/examples`` directory of the github repository. These can also be found
 in the official documentation.
+
+Acknowledging
+-------------
+If you use this code in your work, please cite Murray, Robotham, Power (2018).
+Also consider starring/following the repo on github so we know how much it is being used.
+We would also love any input to the code!
