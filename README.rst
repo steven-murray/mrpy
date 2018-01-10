@@ -9,7 +9,7 @@ mrpy
 
 A Python package for calculations with the MRP parameterisation of the Halo Mass Function.
 
-See Murray, Robotham, Power (2018) for more details on what the MRP is.
+See `Murray, Robotham, Power (2018) <http://arxiv.org/abs/1801.02723>`_ for more details on what the MRP is.
 
 
 Documentation
@@ -59,6 +59,6 @@ in the official documentation.
 
 Acknowledging
 -------------
-If you use this code in your work, please cite Murray, Robotham, Power (2018).
+If you use this code in your work, please cite `Murray, Robotham, Power (2018) <http://arxiv.org/abs/1801.02723>`_.
 Also consider starring/following the repo on github so we know how much it is being used.
 We would also love any input to the code!
