@@ -59,6 +59,7 @@ in the official documentation.
 
 Acknowledging
 -------------
-If you use this code in your work, please cite `Murray, Robotham, Power (2018) <http://arxiv.org/abs/1801.02723>`_.
+If you use this code in your work, please cite `Murray, Robotham, Power (2018) <http://arxiv.org/abs/1801.02723>`_
+and/or http://ascl.net/1802.015 (whichever is more appropriate).
 Also consider starring/following the repo on github so we know how much it is being used.
 We would also love any input to the code!
